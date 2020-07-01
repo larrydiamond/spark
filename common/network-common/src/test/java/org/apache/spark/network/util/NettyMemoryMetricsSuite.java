@@ -139,18 +139,18 @@ public class NettyMemoryMetricsSuite {
     Map<String, Metric> serverMetricMap = server.getAllMetrics().getMetrics();
     serverMetricMap.forEach((name, metric) -> {
       Assert.assertTrue(name.startsWith("shuffle-server"));
-      String metricName = name.substring(name.lastIndexOf(".") + 1);
-      Assert.assertTrue(metricName.equals("usedDirectMemory")
-        || metricName.equals("usedHeapMemory")
+      String metricName = name.substring(name.lastIndexOf ('.') + 1);
+      Assert.assertTrue("usedDirectMemory".equals (metricName)
+        || "usedHeapMemory".equals (metricName)
         || NettyMemoryMetrics.VERBOSE_METRICS.contains(metricName));
     });
 
     Map<String, Metric> clientMetricMap = clientFactory.getAllMetrics().getMetrics();
     clientMetricMap.forEach((name, metric) -> {
       Assert.assertTrue(name.startsWith("shuffle-client"));
-      String metricName = name.substring(name.lastIndexOf(".") + 1);
-      Assert.assertTrue(metricName.equals("usedDirectMemory")
-        || metricName.equals("usedHeapMemory")
+      String metricName = name.substring(name.lastIndexOf ('.') + 1);
+      Assert.assertTrue("usedDirectMemory".equals (metricName)
+        || "usedHeapMemory".equals (metricName)
         || NettyMemoryMetrics.VERBOSE_METRICS.contains(metricName));
     });
 

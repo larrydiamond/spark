@@ -397,50 +397,47 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
    * Return whether the given main class represents a thrift server.
    */
   private boolean isThriftServer(String mainClass) {
-    return (mainClass != null &&
-      mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
-  }
-
+    return (mainClass != null && "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2".equals(mainClass));
+      }
   private List<String> findExamplesJars() {
-    boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
+
+  boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     List<String> examplesJars = new ArrayList<>();
     String sparkHome = getSparkHome();
-
     File jarsDir;
-    if (new File(sparkHome, "RELEASE").isFile()) {
-      jarsDir = new File(sparkHome, "examples/jars");
-    } else {
-      jarsDir = new File(sparkHome,
-        String.format("examples/target/scala-%s/jars", getScalaVersion()));
-    }
 
-    boolean foundDir = jarsDir.isDirectory();
-    checkState(isTesting || foundDir, "Examples jars directory '%s' does not exist.",
-        jarsDir.getAbsolutePath());
+    if (new File(sparkHome, "RELEASE").isFile()) {
+    jarsDir = new File(sparkHome, "examples/jars");
+      } else {
+    jarsDir = new File(sparkHome, String.format("examples/target/scala-%s/jars", getScalaVersion()));
+      }
+        boolean foundDir = jarsDir.isDirectory();
+    checkState(isTesting || foundDir, "Examples jars directory '%s' does not exist.", jarsDir.getAbsolutePath());
 
     if (foundDir) {
-      for (File f: jarsDir.listFiles()) {
+    for (File f : jarsDir.listFiles()) {
         examplesJars.add(f.getAbsolutePath());
-      }
+
     }
-    return examplesJars;
-  }
-
-  private class OptionParser extends SparkSubmitOptionParser {
-
+      }
+        return examplesJars;
+      }
+    private class OptionParser extends SparkSubmitOptionParser {
     boolean isSpecialCommand = false;
-    private final boolean errorOnUnknownArgs;
+  private final boolean errorOnUnknownArgs;
 
-    OptionParser(boolean errorOnUnknownArgs) {
-      this.errorOnUnknownArgs = errorOnUnknownArgs;
+  OptionParser(boolean errorOnUnknownArgs) {
+
+    this.errorOnUnknownArgs = errorOnUnknownArgs;
     }
 
     @Override
-    protected boolean handle(String opt, String value) {
-      switch (opt) {
-        case MASTER:
-          master = value;
-          break;
+      protected boolean handle(String opt, String value) {
+    switch(opt) {
+
+    case MASTER:
+    master = value;
+      break;
         case DEPLOY_MODE:
           deployMode = value;
           break;
@@ -462,73 +459,71 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         case CONF:
           checkArgument(value != null, "Missing argument to %s", CONF);
           String[] setConf = value.split("=", 2);
-          checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
+        checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);
           conf.put(setConf[0], setConf[1]);
           break;
-        case CLASS:
+          case CLASS:
+          mainClass = value;
+          if (specialClasses.containsKey(value)) {
+        allowsMixedArguments = true;
           // The special classes require some special command line handling, since they allow
           // mixing spark-submit arguments with arguments that should be propagated to the shell
           // itself. Note that for this to work, the "--class" argument must come before any
           // non-spark-submit arguments.
-          mainClass = value;
-          if (specialClasses.containsKey(value)) {
-            allowsMixedArguments = true;
-            appResource = specialClasses.get(value);
+          appResource = specialClasses.get(value);
           }
-          break;
-        case KILL_SUBMISSION:
-        case STATUS:
+            break;
+            case KILL_SUBMISSION:
+          case STATUS:
           isSpecialCommand = true;
-          parsedArgs.add(opt);
-          parsedArgs.add(value);
+        parsedArgs.add(opt);
+        parsedArgs.add(value);
           break;
-        case HELP:
-        case USAGE_ERROR:
-        case VERSION:
-          isSpecialCommand = true;
-          parsedArgs.add(opt);
-          break;
-        default:
+          case HELP:
+          case USAGE_ERROR:
+          case VERSION:
+        isSpecialCommand = true;
+        parsedArgs.add(opt);
+        break;
+          default:
           parsedArgs.add(opt);
           if (value != null) {
-            parsedArgs.add(value);
+        parsedArgs.add(value);
           }
           break;
-      }
-      return true;
-    }
+            }
+          return true;
+          }
+      @Override
+      protected boolean handleUnknown(String opt) {
+    if (allowsMixedArguments) {
 
-    @Override
-    protected boolean handleUnknown(String opt) {
+    appArgs.add(opt);
+    return true;
       // When mixing arguments, add unrecognized parameters directly to the user arguments list. In
       // normal mode, any unrecognized parameter triggers the end of command line parsing, and the
       // parameter itself will be interpreted by SparkSubmit as the application resource. The
       // remaining params will be appended to the list of SparkSubmit arguments.
-      if (allowsMixedArguments) {
-        appArgs.add(opt);
-        return true;
       } else if (isExample) {
         String className = opt;
         if (!className.startsWith(EXAMPLE_CLASS_PREFIX)) {
-          className = EXAMPLE_CLASS_PREFIX + className;
+      className = EXAMPLE_CLASS_PREFIX + className;
         }
         mainClass = className;
-        appResource = SparkLauncher.NO_RESOURCE;
+          appResource = SparkLauncher.NO_RESOURCE;
         return false;
-      } else if (errorOnUnknownArgs) {
+        } else if (errorOnUnknownArgs) {
         checkArgument(!opt.startsWith("-"), "Unrecognized option: %s", opt);
         checkState(appResource == null, "Found unrecognized argument but resource is already set.");
-        appResource = opt;
+      appResource = opt;
         return false;
+        }
+        return true;
+        }
+      @Override
+      protected void handleExtraArgs(List<String> extra) {
+    appArgs.addAll(extra);
+
+    }
+    }
       }
-      return true;
-    }
-
-    @Override
-    protected void handleExtraArgs(List<String> extra) {
-      appArgs.addAll(extra);
-    }
-
-  }
-
-}

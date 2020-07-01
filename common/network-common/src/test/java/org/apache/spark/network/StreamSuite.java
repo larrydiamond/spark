@@ -231,7 +231,7 @@ public class StreamSuite {
           byte[] expected = new byte[base.remaining()];
           base.get(expected);
           assertEquals(expected.length, result.length);
-          assertTrue("buffers don't match", Arrays.equals(expected, result));
+          assertEquals("buffers don't match", Arrays, expected);
         }
       } catch (Throwable t) {
         error = t;

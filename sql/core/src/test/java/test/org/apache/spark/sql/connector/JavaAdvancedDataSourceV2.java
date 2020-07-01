@@ -63,7 +63,7 @@ public class JavaAdvancedDataSourceV2 implements TestingV2Source {
       Filter[] supported = Arrays.stream(filters).filter(f -> {
         if (f instanceof GreaterThan) {
           GreaterThan gt = (GreaterThan) f;
-          return gt.attribute().equals("i") && gt.value() instanceof Integer;
+          return "i".equals(gt.attribute()) && gt.value() instanceof Integer;
         } else {
           return false;
         }
@@ -72,7 +72,7 @@ public class JavaAdvancedDataSourceV2 implements TestingV2Source {
       Filter[] unsupported = Arrays.stream(filters).filter(f -> {
         if (f instanceof GreaterThan) {
           GreaterThan gt = (GreaterThan) f;
-          return !gt.attribute().equals("i") || !(gt.value() instanceof Integer);
+          return !"i".equals(gt.attribute()) || !(gt.value() instanceof Integer);
         } else {
           return true;
         }

@@ -260,13 +260,13 @@ public class ExternalBlockHandler extends RpcHandler {
       String execId = msg.execId;
       String[] blockIds = msg.blockIds;
       String[] blockId0Parts = blockIds[0].split("_");
-      if (blockId0Parts.length == 4 && blockId0Parts[0].equals("shuffle")) {
+      if (blockId0Parts.length == 4 && "shuffle".equals(blockId0Parts[0])) {
         final int shuffleId = Integer.parseInt(blockId0Parts[1]);
         final int[] mapIdAndReduceIds = shuffleMapIdAndReduceIds(blockIds, shuffleId);
         size = mapIdAndReduceIds.length;
         blockDataForIndexFn = index -> blockManager.getBlockData(appId, execId, shuffleId,
           mapIdAndReduceIds[index], mapIdAndReduceIds[index + 1]);
-      } else if (blockId0Parts.length == 3 && blockId0Parts[0].equals("rdd")) {
+      } else if (blockId0Parts.length == 3 && "rdd".equals(blockId0Parts[0])) {
         final int[] rddAndSplitIds = rddAndSplitIds(blockIds);
         size = rddAndSplitIds.length;
         blockDataForIndexFn = index -> blockManager.getRddBlockData(appId, execId,
@@ -280,7 +280,7 @@ public class ExternalBlockHandler extends RpcHandler {
       final int[] rddAndSplitIds = new int[2 * blockIds.length];
       for (int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
-        if (blockIdParts.length != 3 || !blockIdParts[0].equals("rdd")) {
+        if (blockIdParts.length != 3 || !"rdd".equals(blockIdParts[0])) {
           throw new IllegalArgumentException("Unexpected RDD block id format: " + blockIds[i]);
         }
         rddAndSplitIds[2 * i] = Integer.parseInt(blockIdParts[1]);
@@ -293,7 +293,7 @@ public class ExternalBlockHandler extends RpcHandler {
       final int[] mapIdAndReduceIds = new int[2 * blockIds.length];
       for (int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
-        if (blockIdParts.length != 4 || !blockIdParts[0].equals("shuffle")) {
+        if (blockIdParts.length != 4 || !"shuffle".equals(blockIdParts[0])) {
           throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[i]);
         }
         if (Integer.parseInt(blockIdParts[1]) != shuffleId) {

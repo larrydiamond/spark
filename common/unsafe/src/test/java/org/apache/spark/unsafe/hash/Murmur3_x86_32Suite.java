@@ -28,6 +28,7 @@ import org.apache.spark.unsafe.Platform;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.security.SecureRandom;
 /**
  * Test file based on Guava's Murmur3Hash32Test.
  */
@@ -73,7 +74,7 @@ public class Murmur3_x86_32Suite {
   @Test
   public void randomizedStressTest() {
     int size = 65536;
-    Random rand = new Random();
+    Random rand = new SecureRandom();
 
     // A set used to track collision rate.
     Set<Integer> hashcodes = new HashSet<>();
@@ -93,7 +94,7 @@ public class Murmur3_x86_32Suite {
   @Test
   public void randomizedStressTestBytes() {
     int size = 65536;
-    Random rand = new Random();
+    Random rand = new SecureRandom();
 
     // A set used to track collision rate.
     Set<Integer> hashcodes = new HashSet<>();

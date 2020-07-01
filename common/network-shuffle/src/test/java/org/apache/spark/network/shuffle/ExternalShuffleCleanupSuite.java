@@ -31,6 +31,7 @@ import static org.junit.Assert.assertTrue;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
+import java.security.SecureRandom;
 public class ExternalShuffleCleanupSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
@@ -45,12 +46,12 @@ public class ExternalShuffleCleanupSuite {
     ExternalShuffleBlockResolver resolver =
       new ExternalShuffleBlockResolver(conf, null, sameThreadExecutor);
     resolver.registerExecutor("app", "exec0", dataContext.createExecutorInfo(SORT_MANAGER));
-    resolver.applicationRemoved("app", false /* cleanup */);
+    resolver.applicationRemoved("app", false);
 
     assertStillThere(dataContext);
 
     resolver.registerExecutor("app", "exec1", dataContext.createExecutorInfo(SORT_MANAGER));
-    resolver.applicationRemoved("app", true /* cleanup */);
+    resolver.applicationRemoved("app", true);
 
     assertCleanedUp(dataContext);
   }
@@ -135,7 +136,7 @@ public class ExternalShuffleCleanupSuite {
   }
 
   private static TestShuffleDataContext createSomeData() throws IOException {
-    Random rand = new Random(123);
+    Random rand = new SecureRandom();
     TestShuffleDataContext dataContext = new TestShuffleDataContext(10, 5);
 
     dataContext.create();

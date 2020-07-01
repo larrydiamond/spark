@@ -51,6 +51,7 @@ import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
+import java.security.SecureRandom;
 public class ChunkFetchIntegrationSuite {
   static final long STREAM_ID = 1;
   static final int BUFFER_CHUNK_INDEX = 0;
@@ -81,7 +82,7 @@ public class ChunkFetchIntegrationSuite {
     boolean shouldSuppressIOException = true;
     try {
       byte[] fileContent = new byte[1024];
-      new Random().nextBytes(fileContent);
+      new SecureRandom().nextBytes(fileContent);
       fp.write(fileContent);
       shouldSuppressIOException = false;
     } finally {

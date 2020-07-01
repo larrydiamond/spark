@@ -28,6 +28,7 @@ import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.util.LinearDataGenerator;
 
+import java.security.SecureRandom;
 public class JavaRidgeRegressionSuite extends SharedSparkSession {
 
   private static double predictionError(List<LabeledPoint> validationData,
@@ -42,7 +43,7 @@ public class JavaRidgeRegressionSuite extends SharedSparkSession {
 
   private static List<LabeledPoint> generateRidgeData(int numPoints, int numFeatures, double std) {
     // Pick weights as random values distributed uniformly in [-0.5, 0.5]
-    Random random = new Random(42);
+    Random random = new SecureRandom();
     double[] w = new double[numFeatures];
     for (int i = 0; i < w.length; i++) {
       w[i] = random.nextDouble() - 0.5;

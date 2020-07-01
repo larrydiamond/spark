@@ -147,283 +147,263 @@ public class JavaBeanDeserializationSuite implements Serializable {
     // if the type is primitive.
     Encoder<RecordSpark22000> encoder = Encoders.bean(RecordSpark22000.class);
 
-    StructType schema = new StructType()
-      .add("shortField", DataTypes.ShortType)
-      .add("intField", DataTypes.IntegerType)
-      .add("longField", DataTypes.LongType)
-      .add("floatField", DataTypes.FloatType)
-      .add("doubleField", DataTypes.DoubleType)
-      .add("stringField", DataTypes.StringType)
-      .add("booleanField", DataTypes.BooleanType)
-      .add("timestampField", DataTypes.TimestampType)
+    StructType schema = new StructType().add("shortField", DataTypes.ShortType).add("intField", DataTypes.IntegerType).add("longField", DataTypes.LongType).add("floatField", DataTypes.FloatType).add("doubleField", DataTypes.DoubleType).add("stringField", DataTypes.StringType).add("booleanField", DataTypes.BooleanType).add("timestampField", DataTypes.TimestampType).add("nullIntField", DataTypes.IntegerType, true);
+      Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+      Dataset<RecordSpark22000> dataset = dataFrame.as(encoder);
+      List<RecordSpark22000> records = dataset.collectAsList();
+      Assert.assertEquals(expectedRecords, records);
+      }
+      @Test
+      public void testSpark22000FailToUpcast() {
+      List<Row> inputRows = new ArrayList<>();
       // explicitly setting nullable = true to make clear the intention
-      .add("nullIntField", DataTypes.IntegerType, true);
+      for (long idx = 0; idx < 5; idx++) {
 
-    Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
-    Dataset<RecordSpark22000> dataset = dataFrame.as(encoder);
+    Row row = createRecordSpark22000FailToUpcastRow(idx);
+    inputRows.add(row);
 
-    List<RecordSpark22000> records = dataset.collectAsList();
-
-    Assert.assertEquals(expectedRecords, records);
-  }
-
-  @Test
-  public void testSpark22000FailToUpcast() {
-    List<Row> inputRows = new ArrayList<>();
-    for (long idx = 0 ; idx < 5 ; idx++) {
-      Row row = createRecordSpark22000FailToUpcastRow(idx);
-      inputRows.add(row);
     }
+
+    Encoder<RecordSpark22000FailToUpcast> encoder = Encoders.bean(RecordSpark22000FailToUpcast.class);
+  StructType schema = new StructType().add("id", DataTypes.StringType);
+
+  Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+  try {
+    dataFrame.as(encoder).collect();
+    Assert.fail("Expected AnalysisException, but passed.");
+      } catch (Throwable e) {
+      if (e instanceof AnalysisException) {
+    Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
 
     // Here we try to convert the fields, from string type to int, which upcast doesn't help.
-    Encoder<RecordSpark22000FailToUpcast> encoder =
-            Encoders.bean(RecordSpark22000FailToUpcast.class);
+    } else {
+            throw e;
 
-    StructType schema = new StructType().add("id", DataTypes.StringType);
+    }
 
-    Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+    }
 
-    try {
-      dataFrame.as(encoder).collect();
-      Assert.fail("Expected AnalysisException, but passed.");
-    } catch (Throwable e) {
+    }
+      private static Row createRecordSpark22000Row(Long index) {
+      Object[] values = new Object[] { index.shortValue(), index.intValue(), index, index.floatValue(), index.doubleValue(), String.valueOf(index), index % 2 == 0, new java.sql.Timestamp(System.currentTimeMillis()), null };
+    return new GenericRow(values);
       // Here we need to handle weird case: compiler complains AnalysisException never be thrown
       // in try statement, but it can be thrown actually. Maybe Scala-Java interop issue?
-      if (e instanceof AnalysisException) {
-        Assert.assertTrue(e.getMessage().contains("Cannot up cast "));
-      } else {
-        throw e;
       }
+        private static String timestampToString(Timestamp ts) {
+      String timestampString = String.valueOf(ts);
+        String formatted = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(ts);
+      if (timestampString.length() > 19 && !".0".equals(timestampString.substring(19))) {
+    return formatted + timestampString.substring(19);
+  } else {
+
+  return formatted;
     }
-  }
-
-  private static Row createRecordSpark22000Row(Long index) {
-    Object[] values = new Object[] {
-            index.shortValue(),
-            index.intValue(),
-            index,
-            index.floatValue(),
-            index.doubleValue(),
-            String.valueOf(index),
-            index % 2 == 0,
-            new java.sql.Timestamp(System.currentTimeMillis()),
-            null
-    };
-    return new GenericRow(values);
-  }
-
-  private static String timestampToString(Timestamp ts) {
-    String timestampString = String.valueOf(ts);
-    String formatted = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(ts);
-
-    if (timestampString.length() > 19 && !timestampString.substring(19).equals(".0")) {
-      return formatted + timestampString.substring(19);
-    } else {
-      return formatted;
-    }
-  }
-
-  private static RecordSpark22000 createRecordSpark22000(Row recordRow) {
-    RecordSpark22000 record = new RecordSpark22000();
-    record.setShortField(String.valueOf(recordRow.getShort(0)));
-    record.setIntField(String.valueOf(recordRow.getInt(1)));
-    record.setLongField(String.valueOf(recordRow.getLong(2)));
-    record.setFloatField(String.valueOf(recordRow.getFloat(3)));
-    record.setDoubleField(String.valueOf(recordRow.getDouble(4)));
-    record.setStringField(recordRow.getString(5));
+            }
+            private static RecordSpark22000 createRecordSpark22000(Row recordRow) {
+            RecordSpark22000 record = new RecordSpark22000();
+            record.setShortField(String.valueOf(recordRow.getShort(0)));
+            record.setIntField(String.valueOf(recordRow.getInt(1)));
+            record.setLongField(String.valueOf(recordRow.getLong(2)));
+            record.setFloatField(String.valueOf(recordRow.getFloat(3)));
+            record.setDoubleField(String.valueOf(recordRow.getDouble(4)));
+            record.setStringField(recordRow.getString(5));
     record.setBooleanField(String.valueOf(recordRow.getBoolean(6)));
     record.setTimestampField(timestampToString(recordRow.getTimestamp(7)));
-    // This would figure out that null value will not become "null".
-    record.setNullIntField(null);
-    return record;
-  }
+  record.setNullIntField(null);
 
-  private static Row createRecordSpark22000FailToUpcastRow(Long index) {
+  return record;
+    }
+    private static Row createRecordSpark22000FailToUpcastRow(Long index) {
+
     Object[] values = new Object[] { String.valueOf(index) };
-    return new GenericRow(values);
+      return new GenericRow(values);
+    }
+      public static class ArrayRecord {
+    private int id;
+  private List<Interval> intervals;
+
+  private int[] ints;
+    public ArrayRecord() {
+    }
+    ArrayRecord(int id, List<Interval> intervals, int[] ints) {
+    this.id = id;
+    this.intervals = intervals;
+    this.ints = ints;
+    }
+    public int getId() {
+    return id;
+    // This would figure out that null value will not become "null".
+    }
+    public void setId(int id) {
+  this.id = id;
+
+  }
+    public List<Interval> getIntervals() {
+    return intervals;
   }
 
-  public static class ArrayRecord {
+  public void setIntervals(List<Interval> intervals) {
 
-    private int id;
-    private List<Interval> intervals;
-    private int[] ints;
-
-    public ArrayRecord() { }
-
-    ArrayRecord(int id, List<Interval> intervals, int[] ints) {
-      this.id = id;
-      this.intervals = intervals;
-      this.ints = ints;
+    this.intervals = intervals;
     }
-
-    public int getId() {
-      return id;
-    }
-
-    public void setId(int id) {
-      this.id = id;
-    }
-
-    public List<Interval> getIntervals() {
-      return intervals;
-    }
-
-    public void setIntervals(List<Interval> intervals) {
-      this.intervals = intervals;
-    }
-
     public int[] getInts() {
-      return ints;
-    }
 
-    public void setInts(int[] ints) {
+    return ints;
+
+    }
+      public void setInts(int[] ints) {
       this.ints = ints;
-    }
-
+      }
     @Override
+
     public int hashCode() {
       return id ^ Objects.hashCode(intervals) ^ Objects.hashCode(ints);
     }
 
     @Override
-    public boolean equals(Object obj) {
-      if (!(obj instanceof ArrayRecord)) return false;
+      public boolean equals(Object obj) {
+    if (!(obj instanceof ArrayRecord))
+
+    return false;
       ArrayRecord other = (ArrayRecord) obj;
-      return (other.id == this.id) && Objects.equals(other.intervals, this.intervals) &&
-              Arrays.equals(other.ints, ints);
-    }
+    return (other.id == this.id) && Objects.equals(other.intervals, this.intervals) && Arrays.equals(other.ints, ints);
 
-    @Override
+    }
+      @Override
     public String toString() {
-      return String.format("{ id: %d, intervals: %s, ints: %s }", id, intervals,
-              Arrays.toString(ints));
+
+    return String.format("{ id: %d, intervals: %s, ints: %s }", id, intervals, Arrays.toString(ints));
+      }
     }
-  }
 
-  public static class MapRecord {
-
-    private int id;
+    public static class MapRecord {
+      private int id;
     private Map<String, Interval> intervals;
 
-    public MapRecord() { }
-
-    MapRecord(int id, Map<String, Interval> intervals) {
-      this.id = id;
-      this.intervals = intervals;
+    public MapRecord() {
     }
+      MapRecord(int id, Map<String, Interval> intervals) {
+    this.id = id;
 
-    public int getId() {
+    this.intervals = intervals;
+    }
+      public int getId() {
       return id;
-    }
+      }
+              public void setId(int id) {
+    this.id = id;
 
-    public void setId(int id) {
-      this.id = id;
     }
-
     public Map<String, Interval> getIntervals() {
       return intervals;
-    }
-
+              }
     public void setIntervals(Map<String, Interval> intervals) {
-      this.intervals = intervals;
-    }
+  this.intervals = intervals;
 
-    @Override
-    public int hashCode() {
-      return id ^ Objects.hashCode(intervals);
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-      if (!(obj instanceof MapRecord)) return false;
-      MapRecord other = (MapRecord) obj;
-      return (other.id == this.id) && Objects.equals(other.intervals, this.intervals);
-    }
-
-    @Override
-    public String toString() {
-      return String.format("{ id: %d, intervals: %s }", id, intervals);
-    }
   }
 
-  public static class Interval {
-
-    private long startTime;
-    private long endTime;
-
-    public Interval() { }
-
-    Interval(long startTime, long endTime) {
-      this.startTime = startTime;
-      this.endTime = endTime;
-    }
-
-    public long getStartTime() {
-      return startTime;
-    }
-
-    public void setStartTime(long startTime) {
-      this.startTime = startTime;
-    }
-
-    public long getEndTime() {
-      return endTime;
-    }
-
-    public void setEndTime(long endTime) {
-      this.endTime = endTime;
-    }
-
     @Override
     public int hashCode() {
-      return Long.hashCode(startTime) ^ Long.hashCode(endTime);
+
+    return id ^ Objects.hashCode(intervals);
+
+    }
+      @Override
+      public boolean equals(Object obj) {
+    if (!(obj instanceof MapRecord))
+
+    return false;
+      MapRecord other = (MapRecord) obj;
+    return (other.id == this.id) && Objects.equals(other.intervals, this.intervals);
+
+    }
+      @Override
+    public String toString() {
+
+    return String.format("{ id: %d, intervals: %s }", id, intervals);
+      }
+    }
+
+    public static class Interval {
+      private long startTime;
+    private long endTime;
+
+    public Interval() {
+    }
+      Interval(long startTime, long endTime) {
+    this.startTime = startTime;
+
+    this.endTime = endTime;
+    }
+      public long getStartTime() {
+      return startTime;
+      }
+    public void setStartTime(long startTime) {
+
+    this.startTime = startTime;
+    }
+      public long getEndTime() {
+    return endTime;
+  }
+
+  public void setEndTime(long endTime) {
+
+    this.endTime = endTime;
     }
 
     @Override
+
+    public int hashCode() {
+      return Long.hashCode(startTime) ^ Long.hashCode(endTime);
+      }
+    @Override
+
     public boolean equals(Object obj) {
-      if (!(obj instanceof Interval)) return false;
-      Interval other = (Interval) obj;
+      if (!(obj instanceof Interval))
+    return false;
+
+    Interval other = (Interval) obj;
       return (other.startTime == this.startTime) && (other.endTime == this.endTime);
     }
 
     @Override
-    public String toString() {
-      return String.format("[%d,%d]", startTime, endTime);
-    }
-  }
+      public String toString() {
+    return String.format("[%d,%d]", startTime, endTime);
 
-  public static final class RecordSpark22000 {
+    }
+      }
+    public static final class RecordSpark22000 {
+
     private String shortField;
     private String intField;
-    private String longField;
+      private String longField;
     private String floatField;
+
     private String doubleField;
     private String stringField;
-    private String booleanField;
-    private String timestampField;
-    private String nullIntField;
+      private String booleanField;
+      private String timestampField;
+      private String nullIntField;
+    public RecordSpark22000() {
 
-    public RecordSpark22000() { }
-
+    }
     public String getShortField() {
       return shortField;
     }
+  public void setShortField(String shortField) {
 
-    public void setShortField(String shortField) {
-      this.shortField = shortField;
+  this.shortField = shortField;
     }
-
     public String getIntField() {
-      return intField;
+    return intField;
     }
-
     public void setIntField(String intField) {
-      this.intField = intField;
+    this.intField = intField;
     }
-
     public String getLongField() {
-      return longField;
+    return longField;
+
     }
 
     public void setLongField(String longField) {
@@ -479,147 +459,125 @@ public class JavaBeanDeserializationSuite implements Serializable {
     }
 
     @Override
-    public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
-      RecordSpark22000 that = (RecordSpark22000) o;
-      return Objects.equals(shortField, that.shortField) &&
-              Objects.equals(intField, that.intField) &&
-              Objects.equals(longField, that.longField) &&
-              Objects.equals(floatField, that.floatField) &&
-              Objects.equals(doubleField, that.doubleField) &&
-              Objects.equals(stringField, that.stringField) &&
-              Objects.equals(booleanField, that.booleanField) &&
-              Objects.equals(timestampField, that.timestampField) &&
-              Objects.equals(nullIntField, that.nullIntField);
+      public boolean equals(Object o) {
+    if (this == o)
+
+    return true;
+      if (o == null || getClass() != o.getClass())
+    return false;
+
+    RecordSpark22000 that = (RecordSpark22000) o;
+      return Objects.equals(shortField, that.shortField) && Objects.equals(intField, that.intField) && Objects.equals(longField, that.longField) && Objects.equals(floatField, that.floatField) && Objects.equals(doubleField, that.doubleField) && Objects.equals(stringField, that.stringField) && Objects.equals(booleanField, that.booleanField) && Objects.equals(timestampField, that.timestampField) && Objects.equals(nullIntField, that.nullIntField);
     }
 
     @Override
-    public int hashCode() {
-      return Objects.hash(shortField, intField, longField, floatField, doubleField, stringField,
-              booleanField, timestampField, nullIntField);
-    }
+      public int hashCode() {
+    return Objects.hash(shortField, intField, longField, floatField, doubleField, stringField, booleanField, timestampField, nullIntField);
 
-    @Override
+    }
+      @Override
     public String toString() {
-      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-          .append("shortField", shortField)
-          .append("intField", intField)
-          .append("longField", longField)
-          .append("floatField", floatField)
-          .append("doubleField", doubleField)
-          .append("stringField", stringField)
-          .append("booleanField", booleanField)
-          .append("timestampField", timestampField)
-          .append("nullIntField", nullIntField)
-          .toString();
+
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE).append("shortField", shortField).append("intField", intField).append("longField", longField).append("floatField", floatField).append("doubleField", doubleField).append("stringField", stringField).append("booleanField", booleanField).append("timestampField", timestampField).append("nullIntField", nullIntField).toString();
     }
-  }
-
-  public static final class RecordSpark22000FailToUpcast {
-    private Integer id;
-
-    public RecordSpark22000FailToUpcast() {
-    }
-
-    public Integer getId() {
-      return id;
-    }
-
-    public void setId(Integer id) {
-      this.id = id;
-    }
-  }
-
-  @Test
-  public void testBeanWithLocalDateAndInstant() {
-    String originConf = spark.conf().get(SQLConf.DATETIME_JAVA8API_ENABLED().key());
-    try {
-      spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), "true");
-      List<Row> inputRows = new ArrayList<>();
-      List<LocalDateInstantRecord> expectedRecords = new ArrayList<>();
-
-      for (long idx = 0 ; idx < 5 ; idx++) {
-        Row row = createLocalDateInstantRow(idx);
-        inputRows.add(row);
-        expectedRecords.add(createLocalDateInstantRecord(row));
       }
+      public static final class RecordSpark22000FailToUpcast {
+      private Integer id;
+      public RecordSpark22000FailToUpcast() {
+              }
+              public Integer getId() {
+              return id;
+              }
+              public void setId(Integer id) {
+              this.id = id;
+              }
+              }
+    @Test
 
-      Encoder<LocalDateInstantRecord> encoder = Encoders.bean(LocalDateInstantRecord.class);
+    public void testBeanWithLocalDateAndInstant() {
+    String originConf = spark.conf().get(SQLConf.DATETIME_JAVA8API_ENABLED().key());
+      try {
+              spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), "true");
+    List<Row> inputRows = new ArrayList<>();
 
-      StructType schema = new StructType()
-        .add("localDateField", DataTypes.DateType)
-        .add("instantField", DataTypes.TimestampType);
-
-      Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
-      Dataset<LocalDateInstantRecord> dataset = dataFrame.as(encoder);
-
-      List<LocalDateInstantRecord> records = dataset.collectAsList();
-
-      Assert.assertEquals(expectedRecords, records);
-    } finally {
-        spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
-    }
+    List<LocalDateInstantRecord> expectedRecords = new ArrayList<>();
+    for (long idx = 0; idx < 5; idx++) {
+      Row row = createLocalDateInstantRow(idx);
+          inputRows.add(row);
+          expectedRecords.add(createLocalDateInstantRecord(row));
+          }
+          Encoder<LocalDateInstantRecord> encoder = Encoders.bean(LocalDateInstantRecord.class);
+          StructType schema = new StructType().add("localDateField", DataTypes.DateType).add("instantField", DataTypes.TimestampType);
+          Dataset<Row> dataFrame = spark.createDataFrame(inputRows, schema);
+          Dataset<LocalDateInstantRecord> dataset = dataFrame.as(encoder);
+          List<LocalDateInstantRecord> records = dataset.collectAsList();
+          Assert.assertEquals(expectedRecords, records);
+          } finally {
+    spark.conf().set(SQLConf.DATETIME_JAVA8API_ENABLED().key(), originConf);
   }
 
-  public static final class LocalDateInstantRecord {
+  }
+    public static final class LocalDateInstantRecord {
+
     private String localDateField;
     private String instantField;
 
-    public LocalDateInstantRecord() { }
-
+    public LocalDateInstantRecord() {
+      }
     public String getLocalDateField() {
-      return localDateField;
-    }
 
+    return localDateField;
+      }
     public void setLocalDateField(String localDateField) {
-      this.localDateField = localDateField;
-    }
+  this.localDateField = localDateField;
 
-    public String getInstantField() {
-      return instantField;
+  }
+  public String getInstantField() {
+    return instantField;
     }
-
-    public void setInstantField(String instantField) {
+      public void setInstantField(String instantField) {
       this.instantField = instantField;
-    }
+      }
 
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      @Override
+        public boolean equals(Object o) {
+        if (this == o)
+        return true;
+      if (o == null || getClass() != o.getClass())
+
+      return false;
+
       LocalDateInstantRecord that = (LocalDateInstantRecord) o;
-      return Objects.equals(localDateField, that.localDateField) &&
-        Objects.equals(instantField, that.instantField);
-    }
+        return Objects.equals(localDateField, that.localDateField) && Objects.equals(instantField, that.instantField);
+        }
 
-    @Override
-    public int hashCode() {
+      @Override
+      public int hashCode() {
+
       return Objects.hash(localDateField, instantField);
-    }
 
+      }
     @Override
-    public String toString() {
-      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
-          .append("localDateField", localDateField)
-          .append("instantField", instantField)
-          .toString();
+        public String toString() {
+    return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE).append("localDateField", localDateField).append("instantField", instantField).toString();
+  }
+
+  }
+    private static Row createLocalDateInstantRow(Long index) {
+    Object[] values = new Object[] { LocalDate.ofEpochDay(42), Instant.ofEpochSecond(42) };
+
+    return new GenericRow(values);
+
+    }
+      private static LocalDateInstantRecord createLocalDateInstantRecord(Row recordRow) {
+    LocalDateInstantRecord record = new LocalDateInstantRecord();
+
+    record.setLocalDateField(String.valueOf(recordRow.getLocalDate(0)));
+      Instant instant = recordRow.getInstant(1);
+    TimestampFormatter formatter = TimestampFormatter.getFractionFormatter(DateTimeUtils.getZoneId(SQLConf.get().sessionLocalTimeZone()));
+
+    record.setInstantField(formatter.format(DateTimeUtils.instantToMicros(instant)));
+      return record;
     }
 
-  }
-
-  private static Row createLocalDateInstantRow(Long index) {
-    Object[] values = new Object[] { LocalDate.ofEpochDay(42), Instant.ofEpochSecond(42) };
-    return new GenericRow(values);
-  }
-
-  private static LocalDateInstantRecord createLocalDateInstantRecord(Row recordRow) {
-    LocalDateInstantRecord record = new LocalDateInstantRecord();
-    record.setLocalDateField(String.valueOf(recordRow.getLocalDate(0)));
-    Instant instant = recordRow.getInstant(1);
-    TimestampFormatter formatter = TimestampFormatter.getFractionFormatter(
-      DateTimeUtils.getZoneId(SQLConf.get().sessionLocalTimeZone()));
-    record.setInstantField(formatter.format(DateTimeUtils.instantToMicros(instant)));
-    return record;
-  }
-}
+    }

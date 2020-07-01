@@ -34,6 +34,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClient;
 
+import java.security.SecureRandom;
 /**
  * StreamManager which allows registration of an Iterator&lt;ManagedBuffer&gt;, which are
  * individually fetched as chunks by the client. Each registered buffer is one chunk.
@@ -69,7 +70,7 @@ public class OneForOneStreamManager extends StreamManager {
   public OneForOneStreamManager() {
     // For debugging purposes, start with a random stream id to help identifying different streams.
     // This does not need to be globally unique, only unique to this class.
-    nextStreamId = new AtomicLong((long) new Random().nextInt(Integer.MAX_VALUE) * 1000);
+    nextStreamId = new AtomicLong((long) new SecureRandom().nextInt(Integer.MAX_VALUE) * 1000);
     streams = new ConcurrentHashMap<>();
   }
 

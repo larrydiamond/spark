@@ -41,7 +41,7 @@ import java.util.Set;
  */
 @Experimental
 public class CaseInsensitiveStringMap implements Map<String, String> {
-  private final Logger logger = LoggerFactory.getLogger(CaseInsensitiveStringMap.class);
+  private static final Logger logger = LoggerFactory.getLogger(CaseInsensitiveStringMap.class);
 
   private String unsupportedOperationMsg = "CaseInsensitiveStringMap is read-only.";
 
@@ -139,9 +139,9 @@ public class CaseInsensitiveStringMap implements Map<String, String> {
     // We can't use `Boolean.parseBoolean` here, as it returns false for invalid strings.
     if (value == null) {
       return defaultValue;
-    } else if (value.equalsIgnoreCase("true")) {
+    } else if ("true".equalsIgnoreCase (value)) {
       return true;
-    } else if (value.equalsIgnoreCase("false")) {
+    } else if ("false".equalsIgnoreCase (value)) {
       return false;
     } else {
       throw new IllegalArgumentException(value + " is not a boolean string.");

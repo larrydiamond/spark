@@ -38,6 +38,7 @@ import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
+import java.security.SecureRandom;
 public class JavaDirectKafkaStreamSuite implements Serializable {
   private transient JavaStreamingContext ssc = null;
   private transient KafkaTestUtils kafkaTestUtils = null;
@@ -78,7 +79,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     sent.addAll(Arrays.asList(topic1data));
     sent.addAll(Arrays.asList(topic2data));
 
-    Random random = new Random();
+    Random random = new SecureRandom();
 
     final Map<String, Object> kafkaParams = new HashMap<>();
     kafkaParams.put("bootstrap.servers", kafkaTestUtils.brokerAddress());

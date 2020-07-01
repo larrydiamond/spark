@@ -154,9 +154,9 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
       } else {
         portNum = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT);
       }
-    }
+    } else // Binary mode
     // Binary mode
-    else {
+    {
       workerKeepAliveTime =
           hiveConf.getTimeVar(ConfVars.HIVE_SERVER2_THRIFT_WORKER_KEEPALIVE_TIME, TimeUnit.SECONDS);
       portString = System.getenv("HIVE_SERVER2_THRIFT_PORT");
@@ -265,27 +265,25 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
     String clientIpAddress;
     // Http transport mode.
     // We set the thread local ip address, in ThriftHttpServlet.
-    if (cliService.getHiveConf().getVar(
-        ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
-      clientIpAddress = SessionManager.getIpAddress();
-    }
-    else {
+    if ("http".equalsIgnoreCase(cliService.getHiveConf().getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE))) {
+        clientIpAddress = SessionManager.getIpAddress();
+      } else {
+    if (isKerberosAuthMode()) {
+    clientIpAddress = hiveAuthFactory.getIpAddress();
       // Kerberos
-      if (isKerberosAuthMode()) {
-        clientIpAddress = hiveAuthFactory.getIpAddress();
-      }
+      } else // Except kerberos, NOSASL
+        {
+      clientIpAddress = TSetIpAddressProcessor.getUserIpAddress();
       // Except kerberos, NOSASL
-      else {
-        clientIpAddress = TSetIpAddressProcessor.getUserIpAddress();
       }
-    }
-    LOG.debug("Client's IP Address: " + clientIpAddress);
+        }
+      LOG.debug("Client's IP Address: " + clientIpAddress);
     return clientIpAddress;
-  }
+    }
+    /**
+  * Returns the effective username.
 
-  /**
-   * Returns the effective username.
-   * 1. If hive.server2.allow.user.substitution = false: the username of the connecting user
+  * 1. If hive.server2.allow.user.substitution = false: the username of the connecting user
    * 2. If hive.server2.allow.user.substitution = true: the username of the end user,
    * that the connecting user is trying to proxy for.
    * This includes a check whether the connecting user is allowed to proxy for the end user.
@@ -293,338 +291,306 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
    * @return
    * @throws HiveSQLException
    */
-  private String getUserName(TOpenSessionReq req) throws HiveSQLException {
-    String userName = null;
+   private String getUserName(TOpenSessionReq req) throws HiveSQLException {
+   String userName = null;
+  if (isKerberosAuthMode()) {
+    userName = hiveAuthFactory.getRemoteUser();
     // Kerberos
-    if (isKerberosAuthMode()) {
-      userName = hiveAuthFactory.getRemoteUser();
     }
+      if (userName == null) {
+    userName = TSetIpAddressProcessor.getUserName();
     // Except kerberos, NOSASL
-    if (userName == null) {
-      userName = TSetIpAddressProcessor.getUserName();
     }
+      if ("http".equalsIgnoreCase(cliService.getHiveConf().getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE))) {
+    userName = SessionManager.getUserName();
     // Http transport mode.
     // We set the thread local username, in ThriftHttpServlet.
-    if (cliService.getHiveConf().getVar(
-        ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
-      userName = SessionManager.getUserName();
     }
-    if (userName == null) {
+        if (userName == null) {
       userName = req.getUsername();
     }
-
     userName = getShortName(userName);
-    String effectiveClientUser = getProxyUser(userName, req.getConfiguration(), getIpAddress());
+      String effectiveClientUser = getProxyUser(userName, req.getConfiguration(), getIpAddress());
     LOG.debug("Client's username: " + effectiveClientUser);
+
     return effectiveClientUser;
-  }
-
-  private String getShortName(String userName) {
-    String ret = null;
-    if (userName != null) {
-      int indexOfDomainMatch = ServiceUtils.indexOfDomainMatch(userName);
-      ret = (indexOfDomainMatch <= 0) ? userName :
-          userName.substring(0, indexOfDomainMatch);
     }
+    private String getShortName(String userName) {
+    String ret = null;
+  if (userName != null) {
 
-    return ret;
-  }
+  int indexOfDomainMatch = ServiceUtils.indexOfDomainMatch(userName);
+    ret = (indexOfDomainMatch <= 0) ? userName : userName.substring(0, indexOfDomainMatch);
+    }
+      return ret;
+      }
+          /**
+    * Create a session handle
 
-  /**
-   * Create a session handle
-   * @param req
-   * @param res
-   * @return
+    * @param req
+  * @param res
+
+  * @return
    * @throws HiveSQLException
    * @throws LoginException
    * @throws IOException
    */
-  SessionHandle getSessionHandle(TOpenSessionReq req, TOpenSessionResp res)
-      throws HiveSQLException, LoginException, IOException {
-    String userName = getUserName(req);
-    String ipAddress = getIpAddress();
-    TProtocolVersion protocol = getMinVersion(CLIService.SERVER_VERSION,
-        req.getClient_protocol());
-    res.setServerProtocolVersion(protocol);
-    SessionHandle sessionHandle;
-    if (cliService.getHiveConf().getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) &&
-        (userName != null)) {
-      String delegationTokenStr = getDelegationToken(userName);
-      sessionHandle = cliService.openSessionWithImpersonation(protocol, userName,
-          req.getPassword(), ipAddress, req.getConfiguration(), delegationTokenStr);
-    } else {
-      sessionHandle = cliService.openSession(protocol, userName, req.getPassword(),
-          ipAddress, req.getConfiguration());
+   SessionHandle getSessionHandle(TOpenSessionReq req, TOpenSessionResp res) throws HiveSQLException, LoginException, IOException {
+   String userName = getUserName(req);
+   String ipAddress = getIpAddress();
+   TProtocolVersion protocol = getMinVersion(CLIService.SERVER_VERSION, req.getClient_protocol());
+  res.setServerProtocolVersion(protocol);
+      SessionHandle sessionHandle;
+    if (cliService.getHiveConf().getBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS) && (userName != null)) {
+    String delegationTokenStr = getDelegationToken(userName);
+    sessionHandle = cliService.openSessionWithImpersonation(protocol, userName, req.getPassword(), ipAddress, req.getConfiguration(), delegationTokenStr);
+        } else {
+    sessionHandle = cliService.openSession(protocol, userName, req.getPassword(), ipAddress, req.getConfiguration());
     }
     return sessionHandle;
-  }
-
-
-  private String getDelegationToken(String userName)
-      throws HiveSQLException, LoginException, IOException {
-    if (userName == null || !cliService.getHiveConf().getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
-        .equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString())) {
-      return null;
+        }
+      private String getDelegationToken(String userName) throws HiveSQLException, LoginException, IOException {
+      if (userName == null || !cliService.getHiveConf().getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION).equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString())) {
+          return null;
     }
-    try {
-      return cliService.getDelegationTokenFromMetaStore(userName);
+      try {
+          return cliService.getDelegationTokenFromMetaStore(userName);
     } catch (UnsupportedOperationException e) {
-      // The delegation token is not applicable in the given deployment mode
     }
-    return null;
-  }
+  return null;
 
-  private TProtocolVersion getMinVersion(TProtocolVersion... versions) {
+
+  }
+      private TProtocolVersion getMinVersion(TProtocolVersion... versions) {
     TProtocolVersion[] values = TProtocolVersion.values();
-    int current = values[values.length - 1].getValue();
-    for (TProtocolVersion version : versions) {
-      if (current > version.getValue()) {
-        current = version.getValue();
+        int current = values[values.length - 1].getValue();
+      for (TProtocolVersion version : versions) {
+    if (current > version.getValue()) {
+    current = version.getValue();
       }
     }
+      // The delegation token is not applicable in the given deployment mode
     for (TProtocolVersion version : values) {
-      if (version.getValue() == current) {
-        return version;
-      }
+    if (version.getValue() == current) {
+  return version;
+
+  }
     }
     throw new IllegalArgumentException("never");
-  }
-
-  @Override
-  public TCloseSessionResp CloseSession(TCloseSessionReq req) throws TException {
-    TCloseSessionResp resp = new TCloseSessionResp();
+    }
+      @Override
+        public TCloseSessionResp CloseSession(TCloseSessionReq req) throws TException {
+      TCloseSessionResp resp = new TCloseSessionResp();
     try {
-      SessionHandle sessionHandle = new SessionHandle(req.getSessionHandle());
+    SessionHandle sessionHandle = new SessionHandle(req.getSessionHandle());
       cliService.closeSession(sessionHandle);
-      resp.setStatus(OK_STATUS);
-      ThriftCLIServerContext context =
-        (ThriftCLIServerContext)currentServerContext.get();
-      if (context != null) {
-        context.setSessionHandle(null);
+        resp.setStatus(OK_STATUS);
+      ThriftCLIServerContext context = (ThriftCLIServerContext) currentServerContext.get();
+    if (context != null) {
+    context.setSessionHandle(null);
+  }
+
+  } catch (Exception e) {
+  LOG.warn("Error closing session: ", e);
+    resp.setStatus(HiveSQLException.toTStatus(e));
+    }
+      return resp;
       }
-    } catch (Exception e) {
-      LOG.warn("Error closing session: ", e);
-      resp.setStatus(HiveSQLException.toTStatus(e));
-    }
-    return resp;
-  }
-
-  @Override
-  public TGetInfoResp GetInfo(TGetInfoReq req) throws TException {
-    TGetInfoResp resp = new TGetInfoResp();
-    try {
-      GetInfoValue getInfoValue =
-          cliService.getInfo(new SessionHandle(req.getSessionHandle()),
-              GetInfoType.getGetInfoType(req.getInfoType()));
+      @Override
+      public TGetInfoResp GetInfo(TGetInfoReq req) throws TException {
+        TGetInfoResp resp = new TGetInfoResp();
+      try {
+        GetInfoValue getInfoValue = cliService.getInfo(new SessionHandle(req.getSessionHandle()), GetInfoType.getGetInfoType(req.getInfoType()));
       resp.setInfoValue(getInfoValue.toTGetInfoValue());
-      resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
+    resp.setStatus(OK_STATUS);
+      } catch (Exception e) {
       LOG.warn("Error getting info: ", e);
-      resp.setStatus(HiveSQLException.toTStatus(e));
+    resp.setStatus(HiveSQLException.toTStatus(e));
     }
-    return resp;
-  }
+  return resp;
 
+  }
   @Override
-  public TExecuteStatementResp ExecuteStatement(TExecuteStatementReq req) throws TException {
+    public TExecuteStatementResp ExecuteStatement(TExecuteStatementReq req) throws TException {
     TExecuteStatementResp resp = new TExecuteStatementResp();
-    try {
-      SessionHandle sessionHandle = new SessionHandle(req.getSessionHandle());
-      String statement = req.getStatement();
+      try {
+          SessionHandle sessionHandle = new SessionHandle(req.getSessionHandle());
+              String statement = req.getStatement();
       Map<String, String> confOverlay = req.getConfOverlay();
       Boolean runAsync = req.isRunAsync();
-      OperationHandle operationHandle = runAsync ?
-          cliService.executeStatementAsync(sessionHandle, statement, confOverlay)
-          : cliService.executeStatement(sessionHandle, statement, confOverlay);
-          resp.setOperationHandle(operationHandle.toTOperationHandle());
-          resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
-      LOG.warn("Error executing statement: ", e);
-      resp.setStatus(HiveSQLException.toTStatus(e));
-    }
-    return resp;
-  }
-
-  @Override
-  public TGetTypeInfoResp GetTypeInfo(TGetTypeInfoReq req) throws TException {
-    TGetTypeInfoResp resp = new TGetTypeInfoResp();
-    try {
-      OperationHandle operationHandle = cliService.getTypeInfo(new SessionHandle(req.getSessionHandle()));
+    OperationHandle operationHandle = runAsync ? cliService.executeStatementAsync(sessionHandle, statement, confOverlay) : cliService.executeStatement(sessionHandle, statement, confOverlay);
       resp.setOperationHandle(operationHandle.toTOperationHandle());
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {
-      LOG.warn("Error getting type info: ", e);
-      resp.setStatus(HiveSQLException.toTStatus(e));
-    }
-    return resp;
-  }
+    LOG.warn("Error executing statement: ", e);
+  resp.setStatus(HiveSQLException.toTStatus(e));
 
-  @Override
-  public TGetCatalogsResp GetCatalogs(TGetCatalogsReq req) throws TException {
-    TGetCatalogsResp resp = new TGetCatalogsResp();
-    try {
-      OperationHandle opHandle = cliService.getCatalogs(new SessionHandle(req.getSessionHandle()));
-      resp.setOperationHandle(opHandle.toTOperationHandle());
-      resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
+  }
+  return resp;
+    }
+    @Override
+      public TGetTypeInfoResp GetTypeInfo(TGetTypeInfoReq req) throws TException {
+      TGetTypeInfoResp resp = new TGetTypeInfoResp();
+      try {
+      OperationHandle operationHandle = cliService.getTypeInfo(new SessionHandle(req.getSessionHandle()));
+      resp.setOperationHandle(operationHandle.toTOperationHandle());
+          resp.setStatus(OK_STATUS);
+          } catch (Exception e) {
+          LOG.warn("Error getting type info: ", e);
+          resp.setStatus(HiveSQLException.toTStatus(e));
+    }
+      return resp;
+      }
+    @Override
+    public TGetCatalogsResp GetCatalogs(TGetCatalogsReq req) throws TException {
+  TGetCatalogsResp resp = new TGetCatalogsResp();
+
+  try {
+  OperationHandle opHandle = cliService.getCatalogs(new SessionHandle(req.getSessionHandle()));
+    resp.setOperationHandle(opHandle.toTOperationHandle());
+    resp.setStatus(OK_STATUS);
+      } catch (Exception e) {
       LOG.warn("Error getting catalogs: ", e);
       resp.setStatus(HiveSQLException.toTStatus(e));
     }
-    return resp;
-  }
+      return resp;
+      }
+    @Override
+    public TGetSchemasResp GetSchemas(TGetSchemasReq req) throws TException {
+  TGetSchemasResp resp = new TGetSchemasResp();
 
-  @Override
-  public TGetSchemasResp GetSchemas(TGetSchemasReq req) throws TException {
-    TGetSchemasResp resp = new TGetSchemasResp();
-    try {
-      OperationHandle opHandle = cliService.getSchemas(
-          new SessionHandle(req.getSessionHandle()), req.getCatalogName(), req.getSchemaName());
-      resp.setOperationHandle(opHandle.toTOperationHandle());
-      resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
+  try {
+  OperationHandle opHandle = cliService.getSchemas(new SessionHandle(req.getSessionHandle()), req.getCatalogName(), req.getSchemaName());
+    resp.setOperationHandle(opHandle.toTOperationHandle());
+    resp.setStatus(OK_STATUS);
+      } catch (Exception e) {
       LOG.warn("Error getting schemas: ", e);
       resp.setStatus(HiveSQLException.toTStatus(e));
     }
-    return resp;
-  }
+      return resp;
+      }
+    @Override
+    public TGetTablesResp GetTables(TGetTablesReq req) throws TException {
+  TGetTablesResp resp = new TGetTablesResp();
 
-  @Override
-  public TGetTablesResp GetTables(TGetTablesReq req) throws TException {
-    TGetTablesResp resp = new TGetTablesResp();
-    try {
-      OperationHandle opHandle = cliService
-          .getTables(new SessionHandle(req.getSessionHandle()), req.getCatalogName(),
-              req.getSchemaName(), req.getTableName(), req.getTableTypes());
-      resp.setOperationHandle(opHandle.toTOperationHandle());
-      resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
-      LOG.warn("Error getting tables: ", e);
+  try {
+  OperationHandle opHandle = cliService.getTables(new SessionHandle(req.getSessionHandle()), req.getCatalogName(), req.getSchemaName(), req.getTableName(), req.getTableTypes());
+    resp.setOperationHandle(opHandle.toTOperationHandle());
+    resp.setStatus(OK_STATUS);
+      } catch (Exception e) {
+          LOG.warn("Error getting tables: ", e);
       resp.setStatus(HiveSQLException.toTStatus(e));
-    }
+      }
     return resp;
-  }
-
-  @Override
-  public TGetTableTypesResp GetTableTypes(TGetTableTypesReq req) throws TException {
+      }
+      @Override
+    public TGetTableTypesResp GetTableTypes(TGetTableTypesReq req) throws TException {
     TGetTableTypesResp resp = new TGetTableTypesResp();
-    try {
-      OperationHandle opHandle = cliService.getTableTypes(new SessionHandle(req.getSessionHandle()));
-      resp.setOperationHandle(opHandle.toTOperationHandle());
-      resp.setStatus(OK_STATUS);
+  try {
+
+  OperationHandle opHandle = cliService.getTableTypes(new SessionHandle(req.getSessionHandle()));
+  resp.setOperationHandle(opHandle.toTOperationHandle());
+    resp.setStatus(OK_STATUS);
     } catch (Exception e) {
       LOG.warn("Error getting table types: ", e);
-      resp.setStatus(HiveSQLException.toTStatus(e));
-    }
-    return resp;
-  }
-
-  @Override
-  public TGetColumnsResp GetColumns(TGetColumnsReq req) throws TException {
-    TGetColumnsResp resp = new TGetColumnsResp();
+          resp.setStatus(HiveSQLException.toTStatus(e));
+              }
+      return resp;
+      }
+    @Override
+      public TGetColumnsResp GetColumns(TGetColumnsReq req) throws TException {
+      TGetColumnsResp resp = new TGetColumnsResp();
     try {
-      OperationHandle opHandle = cliService.getColumns(
-          new SessionHandle(req.getSessionHandle()),
-          req.getCatalogName(),
-          req.getSchemaName(),
-          req.getTableName(),
-          req.getColumnName());
-      resp.setOperationHandle(opHandle.toTOperationHandle());
-      resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
-      LOG.warn("Error getting columns: ", e);
-      resp.setStatus(HiveSQLException.toTStatus(e));
-    }
-    return resp;
-  }
+    OperationHandle opHandle = cliService.getColumns(new SessionHandle(req.getSessionHandle()), req.getCatalogName(), req.getSchemaName(), req.getTableName(), req.getColumnName());
+  resp.setOperationHandle(opHandle.toTOperationHandle());
 
-  @Override
-  public TGetFunctionsResp GetFunctions(TGetFunctionsReq req) throws TException {
-    TGetFunctionsResp resp = new TGetFunctionsResp();
+  resp.setStatus(OK_STATUS);
+  } catch (Exception e) {
+    LOG.warn("Error getting columns: ", e);
+    resp.setStatus(HiveSQLException.toTStatus(e));
+      }
+      return resp;
+      }
+    @Override
+      public TGetFunctionsResp GetFunctions(TGetFunctionsReq req) throws TException {
+      TGetFunctionsResp resp = new TGetFunctionsResp();
     try {
-      OperationHandle opHandle = cliService.getFunctions(
-          new SessionHandle(req.getSessionHandle()), req.getCatalogName(),
-          req.getSchemaName(), req.getFunctionName());
-      resp.setOperationHandle(opHandle.toTOperationHandle());
-      resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
-      LOG.warn("Error getting functions: ", e);
-      resp.setStatus(HiveSQLException.toTStatus(e));
-    }
-    return resp;
-  }
+    OperationHandle opHandle = cliService.getFunctions(new SessionHandle(req.getSessionHandle()), req.getCatalogName(), req.getSchemaName(), req.getFunctionName());
+  resp.setOperationHandle(opHandle.toTOperationHandle());
 
-  @Override
-  public TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq req) throws TException {
-    TGetOperationStatusResp resp = new TGetOperationStatusResp();
-    try {
-      OperationStatus operationStatus = cliService.getOperationStatus(
-          new OperationHandle(req.getOperationHandle()));
-      resp.setOperationState(operationStatus.getState().toTOperationState());
+  resp.setStatus(OK_STATUS);
+  } catch (Exception e) {
+    LOG.warn("Error getting functions: ", e);
+    resp.setStatus(HiveSQLException.toTStatus(e));
+      }
+          return resp;
+          }
+          @Override
+          public TGetOperationStatusResp GetOperationStatus(TGetOperationStatusReq req) throws TException {
+          TGetOperationStatusResp resp = new TGetOperationStatusResp();
+      try {
+      OperationStatus operationStatus = cliService.getOperationStatus(new OperationHandle(req.getOperationHandle()));
+    resp.setOperationState(operationStatus.getState().toTOperationState());
       HiveSQLException opException = operationStatus.getOperationException();
       if (opException != null) {
-        resp.setSqlState(opException.getSQLState());
-        resp.setErrorCode(opException.getErrorCode());
-        resp.setErrorMessage(opException.getMessage());
+    resp.setSqlState(opException.getSQLState());
+    resp.setErrorCode(opException.getErrorCode());
+  resp.setErrorMessage(opException.getMessage());
+
+  }
+  resp.setStatus(OK_STATUS);
+    } catch (Exception e) {
+    LOG.warn("Error getting operation status: ", e);
+      resp.setStatus(HiveSQLException.toTStatus(e));
+          }
+          return resp;
       }
-      resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
-      LOG.warn("Error getting operation status: ", e);
-      resp.setStatus(HiveSQLException.toTStatus(e));
+      @Override
+    public TCancelOperationResp CancelOperation(TCancelOperationReq req) throws TException {
+      TCancelOperationResp resp = new TCancelOperationResp();
+      try {
+    cliService.cancelOperation(new OperationHandle(req.getOperationHandle()));
+    resp.setStatus(OK_STATUS);
+  } catch (Exception e) {
+
+  LOG.warn("Error cancelling operation: ", e);
+  resp.setStatus(HiveSQLException.toTStatus(e));
     }
     return resp;
-  }
-
-  @Override
-  public TCancelOperationResp CancelOperation(TCancelOperationReq req) throws TException {
-    TCancelOperationResp resp = new TCancelOperationResp();
-    try {
-      cliService.cancelOperation(new OperationHandle(req.getOperationHandle()));
-      resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
-      LOG.warn("Error cancelling operation: ", e);
-      resp.setStatus(HiveSQLException.toTStatus(e));
-    }
-    return resp;
-  }
-
-  @Override
-  public TCloseOperationResp CloseOperation(TCloseOperationReq req) throws TException {
-    TCloseOperationResp resp = new TCloseOperationResp();
-    try {
-      cliService.closeOperation(new OperationHandle(req.getOperationHandle()));
-      resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
+      }
+          @Override
+      public TCloseOperationResp CloseOperation(TCloseOperationReq req) throws TException {
+      TCloseOperationResp resp = new TCloseOperationResp();
+      try {
+        cliService.closeOperation(new OperationHandle(req.getOperationHandle()));
+        resp.setStatus(OK_STATUS);
+        } catch (Exception e) {
       LOG.warn("Error closing operation: ", e);
       resp.setStatus(HiveSQLException.toTStatus(e));
     }
-    return resp;
-  }
+      return resp;
+      }
+    @Override
+    public TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq req) throws TException {
+  TGetResultSetMetadataResp resp = new TGetResultSetMetadataResp();
 
-  @Override
-  public TGetResultSetMetadataResp GetResultSetMetadata(TGetResultSetMetadataReq req)
-      throws TException {
-    TGetResultSetMetadataResp resp = new TGetResultSetMetadataResp();
-    try {
-      TableSchema schema = cliService.getResultSetMetadata(new OperationHandle(req.getOperationHandle()));
-      resp.setSchema(schema.toTTableSchema());
-      resp.setStatus(OK_STATUS);
-    } catch (Exception e) {
+  try {
+  TableSchema schema = cliService.getResultSetMetadata(new OperationHandle(req.getOperationHandle()));
+    resp.setSchema(schema.toTTableSchema());
+    resp.setStatus(OK_STATUS);
+      } catch (Exception e) {
       LOG.warn("Error getting result set metadata: ", e);
-      resp.setStatus(HiveSQLException.toTStatus(e));
+    resp.setStatus(HiveSQLException.toTStatus(e));
+      }
+      return resp;
     }
-    return resp;
-  }
-
-  @Override
+    @Override
   public TFetchResultsResp FetchResults(TFetchResultsReq req) throws TException {
-    TFetchResultsResp resp = new TFetchResultsResp();
-    try {
-      RowSet rowSet = cliService.fetchResults(
-          new OperationHandle(req.getOperationHandle()),
-          FetchOrientation.getFetchOrientation(req.getOrientation()),
-          req.getMaxRows(),
-          FetchType.getFetchType(req.getFetchType()));
-      resp.setResults(rowSet.toTRowSet());
+
+  TFetchResultsResp resp = new TFetchResultsResp();
+  try {
+    RowSet rowSet = cliService.fetchResults(new OperationHandle(req.getOperationHandle()), FetchOrientation.getFetchOrientation(req.getOrientation()), req.getMaxRows(), FetchType.getFetchType(req.getFetchType()));
+    resp.setResults(rowSet.toTRowSet());
       resp.setHasMoreRows(false);
       resp.setStatus(OK_STATUS);
     } catch (Exception e) {
@@ -635,58 +601,45 @@ public abstract class ThriftCLIService extends AbstractService implements TCLISe
   }
 
   protected abstract void initializeServer();
-
   @Override
-  public abstract void run();
-
-  /**
-   * If the proxy user name is provided then check privileges to substitute the user.
-   * @param realUser
-   * @param sessionConf
-   * @param ipAddress
-   * @return
-   * @throws HiveSQLException
-   */
-  private String getProxyUser(String realUser, Map<String, String> sessionConf,
-      String ipAddress) throws HiveSQLException {
+      public abstract void run();
+    /**
+    * If the proxy user name is provided then check privileges to substitute the user.
+      * @param realUser
+      * @param sessionConf
+      * @param ipAddress
+    * @return
+      * @throws HiveSQLException
+      */
+    private String getProxyUser(String realUser, Map<String, String> sessionConf, String ipAddress) throws HiveSQLException {
     String proxyUser = null;
-    // Http transport mode.
-    // We set the thread local proxy username, in ThriftHttpServlet.
-    if (cliService.getHiveConf().getVar(
-        ConfVars.HIVE_SERVER2_TRANSPORT_MODE).equalsIgnoreCase("http")) {
-      proxyUser = SessionManager.getProxyUserName();
-      LOG.debug("Proxy user from query string: " + proxyUser);
-    }
+  if ("http".equalsIgnoreCase(cliService.getHiveConf().getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE))) {
 
+  proxyUser = SessionManager.getProxyUserName();
+  LOG.debug("Proxy user from query string: " + proxyUser);
+    }
     if (proxyUser == null && sessionConf != null && sessionConf.containsKey(HiveAuthFactory.HS2_PROXY_USER)) {
       String proxyUserFromThriftBody = sessionConf.get(HiveAuthFactory.HS2_PROXY_USER);
-      LOG.debug("Proxy user from thrift body: " + proxyUserFromThriftBody);
-      proxyUser = proxyUserFromThriftBody;
-    }
-
-    if (proxyUser == null) {
+          LOG.debug("Proxy user from thrift body: " + proxyUserFromThriftBody);
+          proxyUser = proxyUserFromThriftBody;
+          }
+          if (proxyUser == null) {
       return realUser;
-    }
-
-    // check whether substitution is allowed
-    if (!hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ALLOW_USER_SUBSTITUTION)) {
-      throw new HiveSQLException("Proxy user substitution is not allowed");
-    }
-
-    // If there's no authentication, then directly substitute the user
-    if (HiveAuthFactory.AuthTypes.NONE.toString()
-        .equalsIgnoreCase(hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION))) {
-      return proxyUser;
-    }
-
-    // Verify proxy user privilege of the realUser for the proxyUser
-    HiveAuthFactory.verifyProxyAccess(realUser, proxyUser, ipAddress, hiveConf);
-    LOG.debug("Verified proxy user: " + proxyUser);
+      }
+      if (!hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_ALLOW_USER_SUBSTITUTION)) {
+    throw new HiveSQLException("Proxy user substitution is not allowed");
+      }
+      if (HiveAuthFactory.AuthTypes.NONE.toString().equalsIgnoreCase(hiveConf.getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION))) {
     return proxyUser;
+    }
+  HiveAuthFactory.verifyProxyAccess(realUser, proxyUser, ipAddress, hiveConf);
+
+  LOG.debug("Verified proxy user: " + proxyUser);
+
+  return proxyUser;
   }
 
   private boolean isKerberosAuthMode() {
-    return cliService.getHiveConf().getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION)
-        .equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString());
-  }
-}
+   return cliService.getHiveConf().getVar(ConfVars.HIVE_SERVER2_AUTHENTICATION).equalsIgnoreCase(HiveAuthFactory.AuthTypes.KERBEROS.toString());
+   }
+   }

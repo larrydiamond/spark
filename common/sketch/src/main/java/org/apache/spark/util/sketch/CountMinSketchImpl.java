@@ -21,6 +21,7 @@ import java.io.*;
 import java.util.Arrays;
 import java.util.Random;
 
+import java.security.SecureRandom;
 class CountMinSketchImpl extends CountMinSketch implements Serializable {
   private static final long PRIME_MODULUS = (1L << 31) - 1;
 
@@ -99,7 +100,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
   private void initTablesWith(int depth, int width, int seed) {
     this.table = new long[depth][width];
     this.hashA = new long[depth];
-    Random r = new Random(seed);
+    Random r = new SecureRandom();
     // We're using a linear hash functions
     // of the form (a*x+b) mod p.
     // a,b are chosen independently for each hash function.

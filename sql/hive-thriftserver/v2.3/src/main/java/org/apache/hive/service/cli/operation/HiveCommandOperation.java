@@ -82,134 +82,132 @@ public class HiveCommandOperation extends ExecuteStatementOperation {
         sessionState.out = new PrintStream(System.out, true, UTF_8.name());
         sessionState.err = new PrintStream(System.err, true, UTF_8.name());
       } catch (UnsupportedEncodingException ee) {
-        LOG.error("Error creating PrintStream", e);
-        ee.printStackTrace();
+        LOG.error("Error creating PrintStream", e, ee);
         sessionState.out = null;
         sessionState.err = null;
+        }
       }
     }
-  }
-
-
   private void tearDownSessionIO() {
-    ServiceUtils.cleanup(LOG,
-        parentSession.getSessionState().out, parentSession.getSessionState().err);
-  }
 
-  @Override
+
+  ServiceUtils.cleanup(LOG, parentSession.getSessionState().out, parentSession.getSessionState().err);
+    }
+        @Override
   public void runInternal() throws HiveSQLException {
-    setState(OperationState.RUNNING);
-    try {
-      String command = getStatement().trim();
-      String[] tokens = statement.split("\\s");
-      String commandArgs = command.substring(tokens[0].length()).trim();
 
+  setState(OperationState.RUNNING);
+  try {
+    String command = getStatement().trim();
+    String[] tokens = statement.split("\\s");
+      String commandArgs = command.substring(tokens[0].length()).trim();
       CommandProcessorResponse response = commandProcessor.run(commandArgs);
       int returnCode = response.getResponseCode();
-      if (returnCode != 0) {
-        throw toSQLException("Error while processing statement", response);
-      }
-      Schema schema = response.getSchema();
-      if (schema != null) {
-        setHasResultSet(true);
-        resultSchema = new TableSchema(schema);
-      } else {
-        setHasResultSet(false);
-        resultSchema = new TableSchema();
-      }
-    } catch (HiveSQLException e) {
-      setState(OperationState.ERROR);
-      throw e;
-    } catch (Exception e) {
-      setState(OperationState.ERROR);
-      throw new HiveSQLException("Error running query: " + e.toString(), e);
-    }
-    setState(OperationState.FINISHED);
-  }
 
-  /* (non-Javadoc)
-   * @see org.apache.hive.service.cli.operation.Operation#close()
-   */
-  @Override
-  public void close() throws HiveSQLException {
-    setState(OperationState.CLOSED);
-    tearDownSessionIO();
+      if (returnCode != 0) {
+      throw toSQLException("Error while processing statement", response);
+      }
+        Schema schema = response.getSchema();
+      if (schema != null) {
+      setHasResultSet(true);
+      resultSchema = new TableSchema(schema);
+        } else {
+        setHasResultSet(false);
+      resultSchema = new TableSchema();
+        }
+        } catch (HiveSQLException e) {
+      setState(OperationState.ERROR);
+    throw e;
+      } catch (Exception e) {
+      setState(OperationState.ERROR);
+    throw new HiveSQLException("Error running query: " + e.toString(), e);
+      }
+      setState(OperationState.FINISHED);
+    }
+    /* (non-Javadoc)
+  * @see org.apache.hive.service.cli.operation.Operation#close()
+
+  */
+   @Override
+   public void close() throws HiveSQLException {
+  setState(OperationState.CLOSED);
+  tearDownSessionIO();
     cleanTmpFile();
     cleanupOperationLog();
-  }
-
-  /* (non-Javadoc)
-   * @see org.apache.hive.service.cli.operation.Operation#getResultSetSchema()
-   */
-  @Override
-  public TableSchema getResultSetSchema() throws HiveSQLException {
-    return resultSchema;
-  }
-
-  /* (non-Javadoc)
-   * @see org.apache.hive.service.cli.operation.Operation#getNextRowSet(org.apache.hive.service.cli.FetchOrientation, long)
-   */
-  @Override
-  public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
-    validateDefaultFetchOrientation(orientation);
-    if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
-      resetResultReader();
     }
-    List<String> rows = readResults((int) maxRows);
+    /* (non-Javadoc)
+  * @see org.apache.hive.service.cli.operation.Operation#getResultSetSchema()
+
+  */
+   @Override
+   public TableSchema getResultSetSchema() throws HiveSQLException {
+  return resultSchema;
+  }
+    /* (non-Javadoc)
+  * @see org.apache.hive.service.cli.operation.Operation#getNextRowSet(org.apache.hive.service.cli.FetchOrientation, long)
+
+  */
+   @Override
+   public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
+  validateDefaultFetchOrientation(orientation);
+  if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
+    resetResultReader();
+    }
+      List<String> rows = readResults((int) maxRows);
     RowSet rowSet = RowSetFactory.create(resultSchema, getProtocolVersion(), false);
-
     for (String row : rows) {
-      rowSet.addRow(new String[] {row});
-    }
-    return rowSet;
-  }
+    rowSet.addRow(new String[] { row });
 
-  /**
-   * Reads the temporary results for non-Hive (non-Driver) commands to the
-   * resulting List of strings.
+    }
+      return rowSet;
+    }
+    /**
+  * Reads the temporary results for non-Hive (non-Driver) commands to the
+
+  * resulting List of strings.
    * @param nLines number of lines read at once. If it is <= 0, then read all lines.
    */
-  private List<String> readResults(int nLines) throws HiveSQLException {
-    if (resultReader == null) {
-      SessionState sessionState = getParentSession().getSessionState();
-      File tmp = sessionState.getTmpOutputFile();
+   private List<String> readResults(int nLines) throws HiveSQLException {
+   if (resultReader == null) {
+  SessionState sessionState = getParentSession().getSessionState();
+    File tmp = sessionState.getTmpOutputFile();
       try {
-        resultReader = new BufferedReader(new FileReader(tmp));
+      resultReader = new BufferedReader(new FileReader(tmp));
       } catch (FileNotFoundException e) {
         LOG.error("File " + tmp + " not found. ", e);
-        throw new HiveSQLException(e);
-      }
-    }
-    List<String> results = new ArrayList<String>();
-
+      throw new HiveSQLException(e);
+        }
+        }
+      List<String> results = new ArrayList<String>();
     for (int i = 0; i < nLines || nLines <= 0; ++i) {
-      try {
-        String line = resultReader.readLine();
-        if (line == null) {
-          // reached the end of the result file
-          break;
+    try {
+
+    String line = resultReader.readLine();
+      if (line == null) {
+        break;
         } else {
+          // reached the end of the result file
           results.add(line);
         }
-      } catch (IOException e) {
+          } catch (IOException e) {
         LOG.error("Reading temp results encountered an exception: ", e);
-        throw new HiveSQLException(e);
-      }
+      throw new HiveSQLException(e);
+        }
+        }
+      return results;
     }
-    return results;
-  }
+    private void cleanTmpFile() {
+  resetResultReader();
 
-  private void cleanTmpFile() {
-    resetResultReader();
-    SessionState sessionState = getParentSession().getSessionState();
+  SessionState sessionState = getParentSession().getSessionState();
     sessionState.deleteTmpOutputFile();
     sessionState.deleteTmpErrOutputFile();
-  }
-
-  private void resetResultReader() {
-    if (resultReader != null) {
-      ServiceUtils.cleanup(LOG, resultReader);
-      resultReader = null;
     }
-  }
-}
+    private void resetResultReader() {
+  if (resultReader != null) {
+
+  ServiceUtils.cleanup(LOG, resultReader);
+    resultReader = null;
+      }
+      }
+    }

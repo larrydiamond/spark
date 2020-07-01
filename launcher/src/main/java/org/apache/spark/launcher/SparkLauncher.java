@@ -382,7 +382,7 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
       if (builder.appName != null) {
         appName = builder.appName;
       } else if (builder.mainClass != null) {
-        int dot = builder.mainClass.lastIndexOf(".");
+        int dot = builder.mainClass.lastIndexOf ('.');
         if (dot >= 0 && dot < builder.mainClass.length() - 1) {
           appName = builder.mainClass.substring(dot + 1, builder.mainClass.length());
         } else {
