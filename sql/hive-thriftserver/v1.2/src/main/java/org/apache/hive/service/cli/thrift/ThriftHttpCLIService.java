@@ -175,7 +175,7 @@ public class ThriftHttpCLIService extends ThriftCLIService {
    * @return
    */
   private String getHttpPath(String httpPath) {
-    if(httpPath == null || httpPath.equals("")) {
+    if(httpPath == null || "".equals (httpPath)) {
       httpPath = "/*";
     }
     else {

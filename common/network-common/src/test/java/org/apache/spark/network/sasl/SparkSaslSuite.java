@@ -63,6 +63,7 @@ import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
+import java.security.SecureRandom;
 /**
  * Jointly tests SparkSaslClient and SparkSaslServer, as both are black boxes.
  */
@@ -177,7 +178,7 @@ public class SparkSaslSuite {
   public void testEncryptedMessage() throws Exception {
     SaslEncryptionBackend backend = mock(SaslEncryptionBackend.class);
     byte[] data = new byte[1024];
-    new Random().nextBytes(data);
+    new SecureRandom().nextBytes(data);
     when(backend.wrap(any(byte[].class), anyInt(), anyInt())).thenReturn(data);
 
     ByteBuf msg = Unpooled.buffer();
@@ -225,7 +226,7 @@ public class SparkSaslSuite {
       TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
 
       byte[] data = new byte[8 * 1024];
-      new Random().nextBytes(data);
+      new SecureRandom().nextBytes(data);
       Files.write(data, file);
 
       SaslEncryptionBackend backend = mock(SaslEncryptionBackend.class);
@@ -266,7 +267,7 @@ public class SparkSaslSuite {
       when(rpcHandler.getStreamManager()).thenReturn(sm);
 
       byte[] data = new byte[8 * 1024];
-      new Random().nextBytes(data);
+      new SecureRandom().nextBytes(data);
       Files.write(data, file);
 
       ctx = new SaslTestCtx(rpcHandler, true, false, testConf);
@@ -288,7 +289,7 @@ public class SparkSaslSuite {
       verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
 
       byte[] received = ByteStreams.toByteArray(response.get().createInputStream());
-      assertTrue(Arrays.equals(data, received));
+      assertEquals(Arrays, data);
     } finally {
       file.delete();
       if (ctx != null) {

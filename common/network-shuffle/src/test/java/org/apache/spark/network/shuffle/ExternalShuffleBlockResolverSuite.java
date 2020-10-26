@@ -160,6 +160,6 @@ public class ExternalShuffleBlockResolverSuite {
     assertEquals(expectedPathname, normPathname);
     File file = new File(normPathname);
     String returnedPath = file.getPath();
-    assertTrue(normPathname == returnedPath);
+    assertTrue(normPathname.equals(returnedPath));
   }
 }

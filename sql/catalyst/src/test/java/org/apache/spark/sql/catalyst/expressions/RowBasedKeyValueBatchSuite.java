@@ -33,9 +33,10 @@ import org.apache.spark.internal.config.package$;
 
 import java.util.Random;
 
+import java.security.SecureRandom;
 public class RowBasedKeyValueBatchSuite {
 
-  private final Random rand = new Random(42);
+  private final Random rand = new SecureRandom();
 
   private TestMemoryManager memoryManager;
   private TaskMemoryManager taskMemoryManager;

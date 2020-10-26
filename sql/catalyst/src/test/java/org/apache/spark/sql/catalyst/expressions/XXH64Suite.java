@@ -27,6 +27,7 @@ import org.apache.spark.unsafe.Platform;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.security.SecureRandom;
 /**
  * Test the XXH64 function.
  * <p/>
@@ -114,7 +115,7 @@ public class XXH64Suite {
   @Test
   public void randomizedStressTest() {
     int size = 65536;
-    Random rand = new Random();
+    Random rand = new SecureRandom();
 
     // A set used to track collision rate.
     Set<Long> hashcodes = new HashSet<>();
@@ -134,7 +135,7 @@ public class XXH64Suite {
   @Test
   public void randomizedStressTestBytes() {
     int size = 65536;
-    Random rand = new Random();
+    Random rand = new SecureRandom();
 
     // A set used to track collision rate.
     Set<Long> hashcodes = new HashSet<>();

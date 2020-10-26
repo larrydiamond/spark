@@ -59,6 +59,7 @@ import org.ietf.jgss.GSSManager;
 import org.ietf.jgss.GSSName;
 import org.ietf.jgss.Oid;
 
+import java.security.SecureRandom;
 /**
  *
  * ThriftHttpServlet
@@ -76,7 +77,7 @@ public class ThriftHttpServlet extends TServlet {
   // Class members for cookie based authentication.
   private CookieSigner signer;
   public static final String AUTH_COOKIE = "hive.server2.auth";
-  private static final Random RAN = new Random();
+  private static final Random RAN = new SecureRandom();
   private boolean isCookieAuthEnabled;
   private String cookieDomain;
   private String cookiePath;
@@ -133,9 +134,9 @@ public class ThriftHttpServlet extends TServlet {
         // For a kerberos setup
         if (isKerberosAuthMode(authType)) {
           clientUserName = doKerberosAuth(request);
-        }
+        } else // For password based authentication
         // For password based authentication
-        else {
+        {
           clientUserName = doPasswdAuth(request, authType);
         }
       }
@@ -356,7 +357,7 @@ public class ThriftHttpServlet extends TServlet {
     try {
       return serviceUGI.doAs(new HttpKerberosServerAction(request, serviceUGI));
     } catch (Exception e) {
-      LOG.error("Failed to authenticate with hive/_HOST kerberos principal");
+      LOG.error("Failed to authenticate with hive/_HOST kerberos principal", e);
       throw new HttpAuthenticationException(e);
     }
 
@@ -533,7 +534,7 @@ public class ThriftHttpServlet extends TServlet {
     Map<String, String[]> params = javax.servlet.http.HttpUtils.parseQueryString( queryString );
     Set<String> keySet = params.keySet();
     for (String key: keySet) {
-      if (key.equalsIgnoreCase("doAs")) {
+      if ("doAs".equalsIgnoreCase(key)) {
         return params.get(key)[0];
       }
     }
@@ -541,5 +542,3 @@ public class ThriftHttpServlet extends TServlet {
   }
 
 }
-
-

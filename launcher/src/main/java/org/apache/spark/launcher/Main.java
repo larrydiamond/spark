@@ -57,7 +57,7 @@ class Main {
     boolean printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));
     Map<String, String> env = new HashMap<>();
     List<String> cmd;
-    if (className.equals("org.apache.spark.deploy.SparkSubmit")) {
+    if ("org.apache.spark.deploy.SparkSubmit".equals(className)) {
       try {
         AbstractCommandBuilder builder = new SparkSubmitCommandBuilder(args);
         cmd = buildCommand(builder, env, printLaunchCommand);

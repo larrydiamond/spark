@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.Random;
 
+import java.security.SecureRandom;
 /**
  * Copied from
  * hadoop-common-project/hadoop-common/src/test/java/org/apache/hadoop/net/ServerSocketUtil.java
@@ -32,7 +33,7 @@ import java.util.Random;
 public class ServerSocketUtil {
 
   private static final Logger LOG = LoggerFactory.getLogger(ServerSocketUtil.class);
-  private static Random rand = new Random();
+  private static Random rand = new SecureRandom();
 
   /**
    * Port scan & allocate is how most other apps find ports

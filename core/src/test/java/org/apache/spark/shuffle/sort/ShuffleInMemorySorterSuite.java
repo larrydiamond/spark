@@ -34,6 +34,7 @@ import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
+import java.security.SecureRandom;
 public class ShuffleInMemorySorterSuite {
 
   protected boolean shouldUseRadixSort() { return false; }
@@ -59,88 +60,70 @@ public class ShuffleInMemorySorterSuite {
 
   @Test
   public void testBasicSorting() throws Exception {
-    final String[] dataToSort = new String[] {
-      "Boba",
-      "Pearls",
-      "Tapioca",
-      "Taho",
-      "Condensed Milk",
-      "Jasmine",
-      "Milk Tea",
-      "Lychee",
-      "Mango"
-    };
-    final SparkConf conf = new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
-    final TaskMemoryManager memoryManager =
-      new TaskMemoryManager(new TestMemoryManager(conf), 0);
-    final MemoryConsumer c = new TestMemoryConsumer(memoryManager);
-    final MemoryBlock dataPage = memoryManager.allocatePage(2048, c);
-    final Object baseObject = dataPage.getBaseObject();
-    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(
-      consumer, 4, shouldUseRadixSort());
-    final HashPartitioner hashPartitioner = new HashPartitioner(4);
+    final String[] dataToSort = new String[] { "Boba", "Pearls", "Tapioca", "Taho", "Condensed Milk", "Jasmine", "Milk Tea", "Lychee", "Mango" };
+      final SparkConf conf = new SparkConf().set(package$.MODULE$.MEMORY_OFFHEAP_ENABLED(), false);
+      final TaskMemoryManager memoryManager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
+      final MemoryConsumer c = new TestMemoryConsumer(memoryManager);
+      final MemoryBlock dataPage = memoryManager.allocatePage(2048, c);
+      final Object baseObject = dataPage.getBaseObject();
+      final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4, shouldUseRadixSort());
+      final HashPartitioner hashPartitioner = new HashPartitioner(4);
+      long position = dataPage.getBaseOffset();
+      for (String str : dataToSort) {
+    if (!sorter.hasSpaceForAnotherRecord()) {
+    sorter.expandPointerArray(consumer.allocateArray(sorter.getMemoryUsage() / 8 * 2));
+    }
+      final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
+    final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
+    Platform.putInt(baseObject, position, strBytes.length);
+    position += 4;
+    Platform.copyMemory(strBytes, Platform.BYTE_ARRAY_OFFSET, baseObject, position, strBytes.length);
+      position += strBytes.length;
+    sorter.insertRecord(recordAddress, hashPartitioner.getPartition(str));
 
     // Write the records into the data page and store pointers into the sorter
-    long position = dataPage.getBaseOffset();
-    for (String str : dataToSort) {
-      if (!sorter.hasSpaceForAnotherRecord()) {
-        sorter.expandPointerArray(
-          consumer.allocateArray(sorter.getMemoryUsage() / 8 * 2));
-      }
-      final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
-      final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
-      Platform.putInt(baseObject, position, strBytes.length);
-      position += 4;
-      Platform.copyMemory(
-        strBytes, Platform.BYTE_ARRAY_OFFSET, baseObject, position, strBytes.length);
-      position += strBytes.length;
-      sorter.insertRecord(recordAddress, hashPartitioner.getPartition(str));
     }
-
-    // Sort the records
     final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
-    int prevPartitionId = -1;
-    Arrays.sort(dataToSort);
-    for (int i = 0; i < dataToSort.length; i++) {
+      int prevPartitionId = -1;
+        Arrays.sort(dataToSort);
+          for (int i = 0; i < dataToSort.length; i++) {
       Assert.assertTrue(iter.hasNext());
       iter.loadNext();
       final int partitionId = iter.packedRecordPointer.getPartitionId();
       Assert.assertTrue(partitionId >= 0 && partitionId <= 3);
-      Assert.assertTrue("Partition id " + partitionId + " should be >= prev id " + prevPartitionId,
-        partitionId >= prevPartitionId);
+      Assert.assertTrue("Partition id " + partitionId + " should be >= prev id " + prevPartitionId, partitionId >= prevPartitionId);
       final long recordAddress = iter.packedRecordPointer.getRecordPointer();
-      final int recordLength = Platform.getInt(
-        memoryManager.getPage(recordAddress), memoryManager.getOffsetInPage(recordAddress));
-      final String str = getStringFromDataPage(
-        memoryManager.getPage(recordAddress),
-        memoryManager.getOffsetInPage(recordAddress) + 4, // skip over record length
-        recordLength);
-      Assert.assertTrue(Arrays.binarySearch(dataToSort, str) != -1);
+        final int recordLength = Platform.getInt(memoryManager.getPage(recordAddress), memoryManager.getOffsetInPage(recordAddress));
+      final String str = getStringFromDataPage(memoryManager.getPage(recordAddress), // skip over record length
+      memoryManager.getOffsetInPage(recordAddress) + 4, recordLength);
+    Assert.assertTrue(Arrays.binarySearch(dataToSort, str) != -1);
+
+    // Sort the records
     }
     Assert.assertFalse(iter.hasNext());
-  }
-
-  @Test
-  public void testSortingManyNumbers() throws Exception {
-    ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4, shouldUseRadixSort());
-    int[] numbersToSort = new int[128000];
-    Random random = new Random(16);
-    for (int i = 0; i < numbersToSort.length; i++) {
-      if (!sorter.hasSpaceForAnotherRecord()) {
-        sorter.expandPointerArray(consumer.allocateArray(sorter.getMemoryUsage() / 8 * 2));
-      }
-      numbersToSort[i] = random.nextInt(PackedRecordPointer.MAXIMUM_PARTITION_ID + 1);
-      sorter.insertRecord(0, numbersToSort[i]);
     }
-    Arrays.sort(numbersToSort);
-    int[] sorterResult = new int[numbersToSort.length];
-    ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
+    @Test
+      public void testSortingManyNumbers() throws Exception {
+      ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(consumer, 4, shouldUseRadixSort());
+      int[] numbersToSort = new int[128000];
+      Random random = new SecureRandom();
+      for (int i = 0; i < numbersToSort.length; i++) {
+        if (!sorter.hasSpaceForAnotherRecord()) {
+      sorter.expandPointerArray(consumer.allocateArray(sorter.getMemoryUsage() / 8 * 2));
+      }
+        numbersToSort[i] = random.nextInt(PackedRecordPointer.MAXIMUM_PARTITION_ID + 1);
+      sorter.insertRecord(0, numbersToSort[i]);
+        }
+        Arrays.sort(numbersToSort);
+        int[] sorterResult = new int[numbersToSort.length];
+      ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
     int j = 0;
     while (iter.hasNext()) {
-      iter.loadNext();
-      sorterResult[j] = iter.packedRecordPointer.getPartitionId();
-      j += 1;
+  iter.loadNext();
+
+  sorterResult[j] = iter.packedRecordPointer.getPartitionId();
+  j += 1;
     }
     Assert.assertArrayEquals(numbersToSort, sorterResult);
-  }
-}
+    }
+    }

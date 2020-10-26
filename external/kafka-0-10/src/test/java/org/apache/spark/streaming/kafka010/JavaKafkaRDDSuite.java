@@ -35,6 +35,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 
+import java.security.SecureRandom;
 public class JavaKafkaRDDSuite implements Serializable {
   private transient JavaSparkContext sc = null;
   private transient KafkaTestUtils kafkaTestUtils = null;
@@ -66,7 +67,7 @@ public class JavaKafkaRDDSuite implements Serializable {
     String topic1 = "topic1";
     String topic2 = "topic2";
 
-    Random random = new Random();
+    Random random = new SecureRandom();
 
     createTopicAndSendData(topic1);
     createTopicAndSendData(topic2);

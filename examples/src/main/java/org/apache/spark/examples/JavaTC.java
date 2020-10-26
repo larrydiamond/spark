@@ -30,6 +30,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.sql.SparkSession;
 
+import java.security.SecureRandom;
 /**
  * Transitive closure on a graph, implemented in Java.
  * Usage: JavaTC [partitions]
@@ -38,7 +39,7 @@ public final class JavaTC {
 
   private static final int numEdges = 200;
   private static final int numVertices = 100;
-  private static final Random rand = new Random(42);
+  private static final Random rand = new SecureRandom();
 
   static List<Tuple2<Integer, Integer>> generateGraph() {
     Set<Tuple2<Integer, Integer>> edges = new HashSet<>(numEdges);

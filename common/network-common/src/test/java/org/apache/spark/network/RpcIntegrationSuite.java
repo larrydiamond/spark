@@ -66,11 +66,11 @@ public class RpcIntegrationSuite {
           RpcResponseCallback callback) {
         String msg = JavaUtils.bytesToString(message);
         String[] parts = msg.split("/");
-        if (parts[0].equals("hello")) {
+        if ("hello".equals(parts[0])) {
           callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
-        } else if (parts[0].equals("return error")) {
+        } else if ("return error".equals(parts[0])) {
           callback.onFailure(new RuntimeException("Returned: " + parts[1]));
-        } else if (parts[0].equals("throw error")) {
+        } else if ("throw error".equals(parts[0])) {
           throw new RuntimeException("Thrown: " + parts[1]);
         }
       }
@@ -431,7 +431,7 @@ public class RpcIntegrationSuite {
     final File outFile;
 
     VerifyingStreamCallback(String streamId) throws IOException {
-      if (streamId.equals("file")) {
+      if ("file".equals(streamId)) {
         outFile = File.createTempFile("data", ".tmp", testData.tempDir);
         out = new FileOutputStream(outFile);
       } else {
@@ -443,7 +443,7 @@ public class RpcIntegrationSuite {
     }
 
     void verify() throws IOException {
-      if (streamId.equals("file")) {
+      if ("file".equals(streamId)) {
         assertTrue("File stream did not match.", Files.equal(testData.testFile, outFile));
       } else {
         byte[] result = ((ByteArrayOutputStream)out).toByteArray();
@@ -455,7 +455,7 @@ public class RpcIntegrationSuite {
         byte[] expected = new byte[base.remaining()];
         base.get(expected);
         assertEquals(expected.length, result.length);
-        assertTrue("buffers don't match", Arrays.equals(expected, result));
+        assertEquals("buffers don't match", Arrays, expected);
       }
     }
 

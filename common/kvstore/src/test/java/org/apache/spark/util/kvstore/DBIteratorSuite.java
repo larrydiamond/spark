@@ -36,13 +36,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import static org.junit.Assert.*;
 
+import java.security.SecureRandom;
 public abstract class DBIteratorSuite {
 
   private static final Logger LOG = LoggerFactory.getLogger(DBIteratorSuite.class);
 
   private static final int MIN_ENTRIES = 42;
   private static final int MAX_ENTRIES = 1024;
-  private static final Random RND = new Random();
+  private static final Random RND = new SecureRandom();
 
   private static List<CustomType1> allEntries;
   private static List<CustomType1> clashingEntries;

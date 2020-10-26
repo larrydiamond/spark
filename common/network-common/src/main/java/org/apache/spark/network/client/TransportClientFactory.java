@@ -46,6 +46,7 @@ import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.*;
 
+import java.security.SecureRandom;
 /**
  * Factory for creating {@link TransportClient}s by using createClient.
  *
@@ -99,7 +100,7 @@ public class TransportClientFactory implements Closeable {
     this.clientBootstraps = Lists.newArrayList(Preconditions.checkNotNull(clientBootstraps));
     this.connectionPool = new ConcurrentHashMap<>();
     this.numConnectionsPerPeer = conf.numConnectionsPerPeer();
-    this.rand = new Random();
+    this.rand = new SecureRandom();
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     this.socketChannelClass = NettyUtils.getClientChannelClass(ioMode);
@@ -108,27 +109,27 @@ public class TransportClientFactory implements Closeable {
         conf.clientThreads(),
         conf.getModuleName() + "-client");
     if (conf.sharedByteBufAllocators()) {
-      this.pooledAllocator = NettyUtils.getSharedPooledByteBufAllocator(
-          conf.preferDirectBufsForSharedByteBufAllocators(), false /* allowCache */);
-    } else {
-      this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
-          conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
-    }
-    this.metrics = new NettyMemoryMetrics(
-      this.pooledAllocator, conf.getModuleName() + "-client", conf);
-    fastFailTimeWindow = (int)(conf.ioRetryWaitTimeMs() * 0.95);
-  }
+      this.pooledAllocator = NettyUtils.getSharedPooledByteBufAllocator(conf.preferDirectBufsForSharedByteBufAllocators(), false);
+          } else {
+    this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(conf.preferDirectBufs(), false, /* allowCache */
+      conf.clientThreads());
+          }
+    this.metrics = new NettyMemoryMetrics(this.pooledAllocator, conf.getModuleName() + "-client", conf);
+    fastFailTimeWindow = (int) (conf.ioRetryWaitTimeMs() * 0.95);
+      }
+    public MetricSet getAllMetrics() {
+  return metrics;
 
-  public MetricSet getAllMetrics() {
-    return metrics;
   }
+    /**
+  * Create a {@link TransportClient} connecting to the given remote host / port.
 
-  /**
-   * Create a {@link TransportClient} connecting to the given remote host / port.
-   *
+  *
    * We maintain an array of clients (size determined by spark.shuffle.io.numConnectionsPerPeer)
+   *
    * and randomly picks one to use. If no client was previously created in the randomly selected
    * spot, this function creates a new client and places it there.
+   *
    *
    * If the fastFail parameter is true, fail immediately when the last attempt to the same address
    * failed within the fast fail time window (95 percent of the io wait retry timeout). The
@@ -249,86 +250,80 @@ public class TransportClientFactory implements Closeable {
     logger.debug("Creating new connection to {}", address);
 
     Bootstrap bootstrap = new Bootstrap();
-    bootstrap.group(workerGroup)
-      .channel(socketChannelClass)
+    bootstrap.group(workerGroup).channel(socketChannelClass).option(ChannelOption.TCP_NODELAY, true).option(ChannelOption.SO_KEEPALIVE, true).option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs()).option(ChannelOption.ALLOCATOR, pooledAllocator);
+      if (conf.receiveBuf() > 0) {
       // Disable Nagle's Algorithm since we don't want packets to wait
-      .option(ChannelOption.TCP_NODELAY, true)
-      .option(ChannelOption.SO_KEEPALIVE, true)
-      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
-      .option(ChannelOption.ALLOCATOR, pooledAllocator);
-
-    if (conf.receiveBuf() > 0) {
       bootstrap.option(ChannelOption.SO_RCVBUF, conf.receiveBuf());
-    }
-
-    if (conf.sendBuf() > 0) {
+      }
+      if (conf.sendBuf() > 0) {
       bootstrap.option(ChannelOption.SO_SNDBUF, conf.sendBuf());
-    }
 
-    final AtomicReference<TransportClient> clientRef = new AtomicReference<>();
+    }
+      final AtomicReference<TransportClient> clientRef = new AtomicReference<>();
     final AtomicReference<Channel> channelRef = new AtomicReference<>();
 
     bootstrap.handler(new ChannelInitializer<SocketChannel>() {
       @Override
-      public void initChannel(SocketChannel ch) {
-        TransportChannelHandler clientHandler = context.initializePipeline(ch);
-        clientRef.set(clientHandler.getClient());
-        channelRef.set(ch);
+    public void initChannel(SocketChannel ch) {
+
+    TransportChannelHandler clientHandler = context.initializePipeline(ch);
+    clientRef.set(clientHandler.getClient());
+
+    channelRef.set(ch);
       }
-    });
+      });
+        long preConnect = System.nanoTime();
+        ChannelFuture cf = bootstrap.connect(address);
+        if (!cf.await(conf.connectionTimeoutMs())) {
+      throw new IOException(String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
+    } else if (cf.cause() != null) {
 
     // Connect to the remote server
-    long preConnect = System.nanoTime();
-    ChannelFuture cf = bootstrap.connect(address);
-    if (!cf.await(conf.connectionTimeoutMs())) {
-      throw new IOException(
-        String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
-    } else if (cf.cause() != null) {
-      throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
+    throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
     }
-
     TransportClient client = clientRef.get();
-    Channel channel = channelRef.get();
-    assert client != null : "Channel future completed successfully with null client";
+      Channel channel = channelRef.get();
+        assert client != null : "Channel future completed successfully with null client";
+    long preBootstrap = System.nanoTime();
+      logger.debug("Connection to {} successful, running bootstraps...", address);
+    try {
+
+    for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
+    clientBootstrap.doBootstrap(client, channel);
+    }
 
     // Execute any client bootstraps synchronously before marking the Client as successful.
-    long preBootstrap = System.nanoTime();
-    logger.debug("Connection to {} successful, running bootstraps...", address);
-    try {
-      for (TransportClientBootstrap clientBootstrap : clientBootstraps) {
-        clientBootstrap.doBootstrap(client, channel);
-      }
-    } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
-      long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
-      logger.error("Exception while bootstrapping client after " + bootstrapTimeMs + " ms", e);
+    } catch (Exception e) {
+    long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
+    logger.error("Exception while bootstrapping client after " + bootstrapTimeMs + " ms", e);
       client.close();
-      throw Throwables.propagate(e);
-    }
+        throw Throwables.propagate(e);
+      }
     long postBootstrap = System.nanoTime();
+      logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)", address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
+      return client;
+      }
+      /**
+    * Close all connections in the connection pool, and shutdown the worker thread pool.
+    */
 
-    logger.info("Successfully created connection to {} after {} ms ({} ms spent in bootstraps)",
-      address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
+    @Override
+      public void close() {
 
-    return client;
-  }
-
-  /** Close all connections in the connection pool, and shutdown the worker thread pool. */
-  @Override
-  public void close() {
-    // Go through all clients and close them if they are active.
     for (ClientPool clientPool : connectionPool.values()) {
-      for (int i = 0; i < clientPool.clients.length; i++) {
-        TransportClient client = clientPool.clients[i];
-        if (client != null) {
-          clientPool.clients[i] = null;
-          JavaUtils.closeQuietly(client);
+  for (int i = 0; i < clientPool.clients.length; i++) {
+
+  TransportClient client = clientPool.clients[i];
+  if (client != null) {
+  clientPool.clients[i] = null;
+    // Go through all clients and close them if they are active.
+    JavaUtils.closeQuietly(client);
+      }
         }
+        }
+          connectionPool.clear();
+          if (workerGroup != null && !workerGroup.isShuttingDown()) {
+        workerGroup.shutdownGracefully();
       }
     }
-    connectionPool.clear();
-
-    if (workerGroup != null && !workerGroup.isShuttingDown()) {
-      workerGroup.shutdownGracefully();
     }
-  }
-}

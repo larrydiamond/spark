@@ -41,6 +41,7 @@ import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
+import java.security.SecureRandom;
 public class AuthEngineSuite {
 
   private static TransportConf conf;
@@ -63,8 +64,8 @@ public class AuthEngineSuite {
       TransportCipher serverCipher = server.sessionCipher();
       TransportCipher clientCipher = client.sessionCipher();
 
-      assertTrue(Arrays.equals(serverCipher.getInputIv(), clientCipher.getOutputIv()));
-      assertTrue(Arrays.equals(serverCipher.getOutputIv(), clientCipher.getInputIv()));
+      assertEquals(Arrays, serverCipher.getInputIv());
+      assertEquals(Arrays, serverCipher.getOutputIv());
       assertEquals(serverCipher.getKey(), clientCipher.getKey());
     } finally {
       client.close();
@@ -145,7 +146,7 @@ public class AuthEngineSuite {
       TransportCipher.EncryptionHandler handler = new TransportCipher.EncryptionHandler(cipher);
 
       byte[] data = new byte[TransportCipher.STREAM_BUFFER_SIZE + 1];
-      new Random().nextBytes(data);
+      new SecureRandom().nextBytes(data);
       ByteBuf buf = Unpooled.wrappedBuffer(data);
 
       ByteArrayWritableChannel channel = new ByteArrayWritableChannel(data.length);

@@ -63,7 +63,7 @@ public class CLIService extends CompositeService implements ICLIService {
     SERVER_VERSION = protocols[protocols.length - 1];
   }
 
-  private final Logger LOG = LoggerFactory.getLogger(CLIService.class.getName());
+  private static final Logger LOG = LoggerFactory.getLogger(CLIService.class.getName());
 
   private HiveConf hiveConf;
   private SessionManager sessionManager;

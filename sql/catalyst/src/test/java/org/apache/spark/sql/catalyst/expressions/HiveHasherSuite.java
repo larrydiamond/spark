@@ -27,6 +27,7 @@ import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
 
+import java.security.SecureRandom;
 public class HiveHasherSuite {
 
   @Test
@@ -61,7 +62,7 @@ public class HiveHasherSuite {
   @Test
   public void randomizedStressTest() {
     int size = 65536;
-    Random rand = new Random();
+    Random rand = new SecureRandom();
 
     // A set used to track collision rate.
     Set<Integer> hashcodes = new HashSet<>();
@@ -81,7 +82,7 @@ public class HiveHasherSuite {
   @Test
   public void randomizedStressTestBytes() {
     int size = 65536;
-    Random rand = new Random();
+    Random rand = new SecureRandom();
 
     // A set used to track collision rate.
     Set<Integer> hashcodes = new HashSet<>();

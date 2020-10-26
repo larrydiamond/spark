@@ -65,6 +65,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
+import java.security.SecureRandom;
 public class UnsafeShuffleWriterSuite {
 
   static final int DEFAULT_INITIAL_SORT_BUFFER_SIZE = 4096;
@@ -123,263 +124,233 @@ public class UnsafeShuffleWriterSuite {
       anyInt(),
       any(ShuffleWriteMetrics.class))).thenAnswer(invocationOnMock -> {
         Object[] args = invocationOnMock.getArguments();
-        return new DiskBlockObjectWriter(
-          (File) args[1],
-          blockManager.serializerManager(),
-          (SerializerInstance) args[2],
-          (Integer) args[3],
-          false,
-          (ShuffleWriteMetrics) args[4],
-          (BlockId) args[0]
-        );
-      });
-
-    when(shuffleBlockResolver.getDataFile(anyInt(), anyLong())).thenReturn(mergedOutputFile);
-
-    Answer<?> renameTempAnswer = invocationOnMock -> {
-      partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
-      File tmp = (File) invocationOnMock.getArguments()[3];
-      if (!mergedOutputFile.delete()) {
-        throw new RuntimeException("Failed to delete old merged output file.");
-      }
+        return new DiskBlockObjectWriter((File) args[1], blockManager.serializerManager(), (SerializerInstance) args[2], (Integer) args[3], false, (ShuffleWriteMetrics) args[4], (BlockId) args[0]);
+          });
+          when(shuffleBlockResolver.getDataFile(anyInt(), anyLong())).thenReturn(mergedOutputFile);
+          Answer<?> renameTempAnswer = invocationOnMock -> {
+          partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
+          File tmp = (File) invocationOnMock.getArguments()[3];
+          if (!mergedOutputFile.delete()) {
+          throw new RuntimeException("Failed to delete old merged output file.");
+        }
       if (tmp != null) {
-        Files.move(tmp.toPath(), mergedOutputFile.toPath());
-      } else if (!mergedOutputFile.createNewFile()) {
-        throw new RuntimeException("Failed to create empty merged output file.");
+
+    Files.move(tmp.toPath(), mergedOutputFile.toPath());
+
+    } else if (!mergedOutputFile.createNewFile()) {
+      throw new RuntimeException("Failed to create empty merged output file.");
       }
       return null;
-    };
-
-    doAnswer(renameTempAnswer)
-        .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), any(File.class));
-
-    doAnswer(renameTempAnswer)
-        .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), eq(null));
-
-    when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
+        };
+      doAnswer(renameTempAnswer).when(shuffleBlockResolver).writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), any(File.class));
+      doAnswer(renameTempAnswer).when(shuffleBlockResolver).writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), eq(null));
+        when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
-      File file = File.createTempFile("spillFile", ".spill", tempDir);
+        File file = File.createTempFile("spillFile", ".spill", tempDir);
       spillFilesCreated.add(file);
       return Tuple2$.MODULE$.apply(blockId, file);
     });
 
     when(taskContext.taskMetrics()).thenReturn(taskMetrics);
-    when(shuffleDep.serializer()).thenReturn(serializer);
-    when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
+        when(shuffleDep.serializer()).thenReturn(serializer);
+        when(shuffleDep.partitioner()).thenReturn(hashPartitioner);
+
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
-  }
+        }
+        private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled) {
 
-  private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled) {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
-    return new UnsafeShuffleWriter<>(
-      blockManager,
-      taskMemoryManager,
-      new SerializedShuffleHandle<>(0, shuffleDep),
-      0L, // map id
-      taskContext,
-      conf,
-      taskContext.taskMetrics().shuffleWriteMetrics(),
-      new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver));
-  }
+      return new // map id
+      UnsafeShuffleWriter<>(// map id
+      blockManager, // map id
+      taskMemoryManager, new SerializedShuffleHandle<>(0, shuffleDep), 0L, taskContext, conf, taskContext.taskMetrics().shuffleWriteMetrics(), new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver));
+    }
 
-  private void assertSpillFilesWereCleanedUp() {
+    private void assertSpillFilesWereCleanedUp() {
     for (File spillFile : spillFilesCreated) {
-      assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up",
-        spillFile.exists());
+    assertFalse("Spill file " + spillFile.getPath() + " was not cleaned up", spillFile.exists());
     }
   }
 
   private List<Tuple2<Object, Object>> readRecordsFromFile() throws IOException {
     final ArrayList<Tuple2<Object, Object>> recordsList = new ArrayList<>();
     long startOffset = 0;
-    for (int i = 0; i < NUM_PARTITITONS; i++) {
+      for (int i = 0; i < NUM_PARTITITONS; i++) {
       final long partitionSize = partitionSizesInMergedFile[i];
       if (partitionSize > 0) {
-        FileInputStream fin = new FileInputStream(mergedOutputFile);
-        fin.getChannel().position(startOffset);
-        InputStream in = new LimitedInputStream(fin, partitionSize);
-        in = blockManager.serializerManager().wrapForEncryption(in);
-        if ((boolean) conf.get(package$.MODULE$.SHUFFLE_COMPRESS())) {
-          in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
+      FileInputStream fin = new FileInputStream(mergedOutputFile);
+      fin.getChannel().position(startOffset);
+      InputStream in = new LimitedInputStream(fin, partitionSize);
+      in = blockManager.serializerManager().wrapForEncryption(in);
+      if ((boolean) conf.get(package$.MODULE$.SHUFFLE_COMPRESS())) {
+  in = CompressionCodec$.MODULE$.createCodec(conf).compressedInputStream(in);
+
+  }
+    try (DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in)) {
+      Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
+        while (records.hasNext()) {
+    Tuple2<Object, Object> record = records.next();
+  assertEquals(i, hashPartitioner.getPartition(record._1()));
+
+  recordsList.add(record);
+    }
+    }
+    startOffset += partitionSize;
+      }
+      }
+        return recordsList;
         }
-        try (DeserializationStream recordsStream = serializer.newInstance().deserializeStream(in)) {
-          Iterator<Tuple2<Object, Object>> records = recordsStream.asKeyValueIterator();
-          while (records.hasNext()) {
-            Tuple2<Object, Object> record = records.next();
-            assertEquals(i, hashPartitioner.getPartition(record._1()));
-            recordsList.add(record);
+        @Test(expected = IllegalStateException.class)
+        public void mustCallWriteBeforeSuccessfulStop() throws IOException {
+        createWriter(false).stop(true);
           }
-        }
-        startOffset += partitionSize;
-      }
+        @Test
+        public void doNotNeedToCallWriteBeforeUnsuccessfulStop() throws IOException {
+          createWriter(false).stop(false);
+          }
+            static class PandaException extends RuntimeException {
+            }
+            @Test(expected = PandaException.class)
+          public void writeFailurePropagates() throws Exception {
+        class BadRecords extends scala.collection.AbstractIterator<Product2<Object, Object>> {
+        @Override
+      public boolean hasNext() {
+    throw new PandaException();
     }
-    return recordsList;
-  }
+  @Override
 
-  @Test(expected=IllegalStateException.class)
-  public void mustCallWriteBeforeSuccessfulStop() throws IOException {
-    createWriter(false).stop(true);
-  }
-
-  @Test
-  public void doNotNeedToCallWriteBeforeUnsuccessfulStop() throws IOException {
-    createWriter(false).stop(false);
-  }
-
-  static class PandaException extends RuntimeException {
-  }
-
-  @Test(expected=PandaException.class)
-  public void writeFailurePropagates() throws Exception {
-    class BadRecords extends scala.collection.AbstractIterator<Product2<Object, Object>> {
-      @Override public boolean hasNext() {
-        throw new PandaException();
-      }
-      @Override public Product2<Object, Object> next() {
-        return null;
-      }
+  public Product2<Object, Object> next() {
+  return null;
     }
-    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(new BadRecords());
   }
 
+  final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
+  writer.write(new BadRecords());
+    }
   @Test
+
   public void writeEmptyIterator() throws Exception {
-    final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(new ArrayList<Product2<Object, Object>>().iterator());
-    final Option<MapStatus> mapStatus = writer.stop(true);
-    assertTrue(mapStatus.isDefined());
-    assertTrue(mergedOutputFile.exists());
-    assertEquals(0, spillFilesCreated.size());
-    assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
-    assertEquals(0, taskMetrics.shuffleWriteMetrics().recordsWritten());
-    assertEquals(0, taskMetrics.shuffleWriteMetrics().bytesWritten());
-    assertEquals(0, taskMetrics.diskBytesSpilled());
-    assertEquals(0, taskMetrics.memoryBytesSpilled());
-  }
+  final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
 
-  @Test
+  writer.write(new ArrayList<Product2<Object, Object>>().iterator());
+  final Option<MapStatus> mapStatus = writer.stop(true);
+    assertTrue(mapStatus.isDefined());
+      assertTrue(mergedOutputFile.exists());
+        assertEquals(0, spillFilesCreated.size());
+      assertArrayEquals(new long[NUM_PARTITITONS], partitionSizesInMergedFile);
+      assertEquals(0, taskMetrics.shuffleWriteMetrics().recordsWritten());
+        assertEquals(0, taskMetrics.shuffleWriteMetrics().bytesWritten());
+      assertEquals(0, taskMetrics.diskBytesSpilled());
+    assertEquals(0, taskMetrics.memoryBytesSpilled());
+    }
+    @Test
   public void writeWithoutSpilling() throws Exception {
-    // In this example, each partition should have exactly one record:
-    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
-    for (int i = 0; i < NUM_PARTITITONS; i++) {
-      dataToWrite.add(new Tuple2<>(i, i));
+
+  final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
+  for (int i = 0; i < NUM_PARTITITONS; i++) {
+    dataToWrite.add(new Tuple2<>(i, i));
     }
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
     writer.write(dataToWrite.iterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
-
     long sumOfPartitionSizes = 0;
-    for (long size: partitionSizesInMergedFile) {
-      // All partitions should be the same size:
-      assertEquals(partitionSizesInMergedFile[0], size);
-      sumOfPartitionSizes += size;
-    }
-    assertEquals(mergedOutputFile.length(), sumOfPartitionSizes);
-    assertEquals(
-      HashMultiset.create(dataToWrite),
-      HashMultiset.create(readRecordsFromFile()));
+    for (long size : partitionSizesInMergedFile) {
+    assertEquals(partitionSizesInMergedFile[0], size);
+    sumOfPartitionSizes += size;
+  }
+
+  assertEquals(mergedOutputFile.length(), sumOfPartitionSizes);
+  assertEquals(HashMultiset.create(dataToWrite), HashMultiset.create(readRecordsFromFile()));
+    // In this example, each partition should have exactly one record:
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
+      assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
     assertEquals(0, taskMetrics.diskBytesSpilled());
     assertEquals(0, taskMetrics.memoryBytesSpilled());
     assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
-  }
-
-  private void testMergingSpills(
-      final boolean transferToEnabled,
-      String compressionCodecName,
-      boolean encrypt) throws Exception {
+    }
+    private void testMergingSpills(final boolean transferToEnabled, String compressionCodecName, boolean encrypt) throws Exception {
     if (compressionCodecName != null) {
-      conf.set(package$.MODULE$.SHUFFLE_COMPRESS(), true);
-      conf.set("spark.io.compression.codec", compressionCodecName);
-    } else {
+
+    conf.set(package$.MODULE$.SHUFFLE_COMPRESS(), true);
+    conf.set("spark.io.compression.codec", compressionCodecName);
+      // All partitions should be the same size:
+      } else {
       conf.set(package$.MODULE$.SHUFFLE_COMPRESS(), false);
     }
     conf.set(package$.MODULE$.IO_ENCRYPTION_ENABLED(), encrypt);
-
     SerializerManager manager;
-    if (encrypt) {
-      manager = new SerializerManager(serializer, conf,
-        Option.apply(CryptoStreamUtils.createKey(conf)));
+      if (encrypt) {
+      manager = new SerializerManager(serializer, conf, Option.apply(CryptoStreamUtils.createKey(conf)));
     } else {
-      manager = new SerializerManager(serializer, conf);
+    manager = new SerializerManager(serializer, conf);
     }
-
     when(blockManager.serializerManager()).thenReturn(manager);
     testMergingSpills(transferToEnabled, encrypt);
-  }
+    }
+  private void testMergingSpills(boolean transferToEnabled, boolean encrypted) throws IOException {
 
-  private void testMergingSpills(
-      boolean transferToEnabled,
-      boolean encrypted) throws IOException {
-    final UnsafeShuffleWriter<Object, Object> writer = createWriter(transferToEnabled);
-    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
-    for (int i : new int[] { 1, 2, 3, 4, 4, 2 }) {
+  final UnsafeShuffleWriter<Object, Object> writer = createWriter(transferToEnabled);
+      final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
+      for (int i : new int[] { 1, 2, 3, 4, 4, 2 }) {
       dataToWrite.add(new Tuple2<>(i, i));
     }
-    writer.insertRecordIntoSorter(dataToWrite.get(0));
-    writer.insertRecordIntoSorter(dataToWrite.get(1));
+      writer.insertRecordIntoSorter(dataToWrite.get(0));
+      writer.insertRecordIntoSorter(dataToWrite.get(1));
     writer.insertRecordIntoSorter(dataToWrite.get(2));
-    writer.insertRecordIntoSorter(dataToWrite.get(3));
+      writer.insertRecordIntoSorter(dataToWrite.get(3));
     writer.forceSorterToSpill();
     writer.insertRecordIntoSorter(dataToWrite.get(4));
+
     writer.insertRecordIntoSorter(dataToWrite.get(5));
     writer.closeAndWriteOutput();
-    final Option<MapStatus> mapStatus = writer.stop(true);
-    assertTrue(mapStatus.isDefined());
+      final Option<MapStatus> mapStatus = writer.stop(true);
+        assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
-    assertEquals(2, spillFilesCreated.size());
-
+      assertEquals(2, spillFilesCreated.size());
     long sumOfPartitionSizes = 0;
-    for (long size: partitionSizesInMergedFile) {
-      sumOfPartitionSizes += size;
-    }
 
-    assertEquals(sumOfPartitionSizes, mergedOutputFile.length());
+    for (long size : partitionSizesInMergedFile) {
+    sumOfPartitionSizes += size;
+  }
 
-    assertEquals(HashMultiset.create(dataToWrite), HashMultiset.create(readRecordsFromFile()));
-    assertSpillFilesWereCleanedUp();
+  assertEquals(sumOfPartitionSizes, mergedOutputFile.length());
+      assertEquals(HashMultiset.create(dataToWrite), HashMultiset.create(readRecordsFromFile()));
+      assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics();
     assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
     assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
-    assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
+      assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
     assertThat(taskMetrics.memoryBytesSpilled(), greaterThan(0L));
     assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
-  }
-
-  @Test
-  public void mergeSpillsWithTransferToAndLZF() throws Exception {
+    }
+    @Test
+    public void mergeSpillsWithTransferToAndLZF() throws Exception {
     testMergingSpills(true, LZFCompressionCodec.class.getName(), false);
-  }
-
-  @Test
-  public void mergeSpillsWithFileStreamAndLZF() throws Exception {
+    }
+    @Test
+    public void mergeSpillsWithFileStreamAndLZF() throws Exception {
     testMergingSpills(false, LZFCompressionCodec.class.getName(), false);
-  }
+    }
+    @Test
+    public void mergeSpillsWithTransferToAndLZ4() throws Exception {
 
-  @Test
-  public void mergeSpillsWithTransferToAndLZ4() throws Exception {
     testMergingSpills(true, LZ4CompressionCodec.class.getName(), false);
-  }
+    }
+      @Test
+    public void mergeSpillsWithFileStreamAndLZ4() throws Exception {
 
-  @Test
-  public void mergeSpillsWithFileStreamAndLZ4() throws Exception {
     testMergingSpills(false, LZ4CompressionCodec.class.getName(), false);
-  }
 
-  @Test
-  public void mergeSpillsWithTransferToAndSnappy() throws Exception {
+    }
+    @Test
+    public void mergeSpillsWithTransferToAndSnappy() throws Exception {
     testMergingSpills(true, SnappyCompressionCodec.class.getName(), false);
-  }
-
-  @Test
-  public void mergeSpillsWithFileStreamAndSnappy() throws Exception {
+    }
+    @Test
+    public void mergeSpillsWithFileStreamAndSnappy() throws Exception {
     testMergingSpills(false, SnappyCompressionCodec.class.getName(), false);
   }
 
@@ -395,8 +366,6 @@ public class UnsafeShuffleWriterSuite {
 
   @Test
   public void mergeSpillsWithCompressionAndEncryption() throws Exception {
-    // This should actually be translated to a "file stream merge" internally, just have the
-    // test to make sure that it's the case.
     testMergingSpills(true, LZ4CompressionCodec.class.getName(), true);
   }
 
@@ -408,71 +377,77 @@ public class UnsafeShuffleWriterSuite {
   @Test
   public void mergeSpillsWithCompressionAndEncryptionSlowPath() throws Exception {
     conf.set(package$.MODULE$.SHUFFLE_UNSAFE_FAST_MERGE_ENABLE(), false);
-    testMergingSpills(false, LZ4CompressionCodec.class.getName(), true);
-  }
+  testMergingSpills(false, LZ4CompressionCodec.class.getName(), true);
 
+  }
   @Test
-  public void mergeSpillsWithEncryptionAndNoCompression() throws Exception {
+    public void mergeSpillsWithEncryptionAndNoCompression() throws Exception {
+  testMergingSpills(true, null, true);
+
+  }
+  @Test
+    public void mergeSpillsWithFileStreamAndEncryptionAndNoCompression() throws Exception {
+  testMergingSpills(false, null, true);
+
+  }
+  @Test
+    public void writeEnoughDataToTriggerSpill() throws Exception {
+  memoryManager.limit(PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES);
+
+  final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
+  final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     // This should actually be translated to a "file stream merge" internally, just have the
     // test to make sure that it's the case.
-    testMergingSpills(true, null, true);
-  }
-
-  @Test
-  public void mergeSpillsWithFileStreamAndEncryptionAndNoCompression() throws Exception {
-    testMergingSpills(false, null, true);
-  }
-
-  @Test
-  public void writeEnoughDataToTriggerSpill() throws Exception {
-    memoryManager.limit(PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES);
-    final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
-    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     final byte[] bigByteArray = new byte[PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES / 10];
-    for (int i = 0; i < 10 + 1; i++) {
-      dataToWrite.add(new Tuple2<>(i, bigByteArray));
-    }
+  for (int i = 0; i < 10 + 1; i++) {
+
+  dataToWrite.add(new Tuple2<>(i, bigByteArray));
+  }
     writer.write(dataToWrite.iterator());
-    assertEquals(2, spillFilesCreated.size());
-    writer.stop(true);
-    readRecordsFromFile();
+  assertEquals(2, spillFilesCreated.size());
+
+  writer.stop(true);
+  readRecordsFromFile();
     assertSpillFilesWereCleanedUp();
     ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
-    assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
-    assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
+  assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
+
+  assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
+  assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
+    // This should actually be translated to a "file stream merge" internally, just have the
+    // test to make sure that it's the case.
     assertThat(taskMetrics.memoryBytesSpilled(), greaterThan(0L));
-    assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
-  }
+  assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
 
-  @Test
-  public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOff() throws Exception {
-    conf.set(package$.MODULE$.SHUFFLE_SORT_USE_RADIXSORT(), false);
-    writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
-    assertEquals(2, spillFilesCreated.size());
   }
-
   @Test
-  public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOn() throws Exception {
+    public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOff() throws Exception {
+  conf.set(package$.MODULE$.SHUFFLE_SORT_USE_RADIXSORT(), false);
+
+  writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
+  assertEquals(2, spillFilesCreated.size());
+    }
+    @Test
+    public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOn() throws Exception {
     conf.set(package$.MODULE$.SHUFFLE_SORT_USE_RADIXSORT(), true);
     writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
-    assertEquals(3, spillFilesCreated.size());
-  }
-
-  private void writeEnoughRecordsToTriggerSortBufferExpansionAndSpill() throws Exception {
+      assertEquals(3, spillFilesCreated.size());
+    }
+    private void writeEnoughRecordsToTriggerSortBufferExpansionAndSpill() throws Exception {
     memoryManager.limit(DEFAULT_INITIAL_SORT_BUFFER_SIZE * 16);
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     for (int i = 0; i < DEFAULT_INITIAL_SORT_BUFFER_SIZE + 1; i++) {
-      dataToWrite.add(new Tuple2<>(i, i));
+    dataToWrite.add(new Tuple2<>(i, i));
     }
     writer.write(dataToWrite.iterator());
     writer.stop(true);
     readRecordsFromFile();
     assertSpillFilesWereCleanedUp();
-    ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics();
-    assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
-    assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
+  ShuffleWriteMetrics shuffleWriteMetrics = taskMetrics.shuffleWriteMetrics();
+
+  assertEquals(dataToWrite.size(), shuffleWriteMetrics.recordsWritten());
+  assertThat(taskMetrics.diskBytesSpilled(), greaterThan(0L));
     assertThat(taskMetrics.diskBytesSpilled(), lessThan(mergedOutputFile.length()));
     assertThat(taskMetrics.memoryBytesSpilled(), greaterThan(0L));
     assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
@@ -483,45 +458,39 @@ public class UnsafeShuffleWriterSuite {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     final byte[] bytes = new byte[(int) (ShuffleExternalSorter.DISK_WRITE_BUFFER_SIZE * 2.5)];
-    new Random(42).nextBytes(bytes);
-    dataToWrite.add(new Tuple2<>(1, ByteBuffer.wrap(bytes)));
+  new SecureRandom().nextBytes(bytes);
+
+  dataToWrite.add(new Tuple2<>(1, ByteBuffer.wrap(bytes)));
     writer.write(dataToWrite.iterator());
     writer.stop(true);
-    assertEquals(
-      HashMultiset.create(dataToWrite),
-      HashMultiset.create(readRecordsFromFile()));
+    assertEquals(HashMultiset.create(dataToWrite), HashMultiset.create(readRecordsFromFile()));
     assertSpillFilesWereCleanedUp();
-  }
-
-  @Test
-  public void writeRecordsThatAreBiggerThanMaxRecordSize() throws Exception {
+      }
+    @Test
+    public void writeRecordsThatAreBiggerThanMaxRecordSize() throws Exception {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     dataToWrite.add(new Tuple2<>(1, ByteBuffer.wrap(new byte[1])));
-    // We should be able to write a record that's right _at_ the max record size
     final byte[] atMaxRecordSize = new byte[(int) taskMemoryManager.pageSizeBytes() - 4];
-    new Random(42).nextBytes(atMaxRecordSize);
+    new SecureRandom().nextBytes(atMaxRecordSize);
     dataToWrite.add(new Tuple2<>(2, ByteBuffer.wrap(atMaxRecordSize)));
-    // Inserting a record that's larger than the max record size
     final byte[] exceedsMaxRecordSize = new byte[(int) taskMemoryManager.pageSizeBytes()];
-    new Random(42).nextBytes(exceedsMaxRecordSize);
+    new SecureRandom().nextBytes(exceedsMaxRecordSize);
     dataToWrite.add(new Tuple2<>(3, ByteBuffer.wrap(exceedsMaxRecordSize)));
-    writer.write(dataToWrite.iterator());
-    writer.stop(true);
-    assertEquals(
-      HashMultiset.create(dataToWrite),
-      HashMultiset.create(readRecordsFromFile()));
-    assertSpillFilesWereCleanedUp();
-  }
+  writer.write(dataToWrite.iterator());
 
-  @Test
-  public void spillFilesAreDeletedWhenStoppingAfterError() throws IOException {
+  writer.stop(true);
+  assertEquals(HashMultiset.create(dataToWrite), HashMultiset.create(readRecordsFromFile()));
+    assertSpillFilesWereCleanedUp();
+    }
+    @Test
+    public void spillFilesAreDeletedWhenStoppingAfterError() throws IOException {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     writer.insertRecordIntoSorter(new Tuple2<>(1, 1));
     writer.insertRecordIntoSorter(new Tuple2<>(2, 2));
     writer.forceSorterToSpill();
-    writer.insertRecordIntoSorter(new Tuple2<>(2, 2));
-    writer.stop(false);
+      writer.insertRecordIntoSorter(new Tuple2<>(2, 2));
+      writer.stop(false);
     assertSpillFilesWereCleanedUp();
   }
 
@@ -530,53 +499,42 @@ public class UnsafeShuffleWriterSuite {
     final long recordLengthBytes = 8;
     final long pageSizeBytes = 256;
     final long numRecordsPerPage = pageSizeBytes / recordLengthBytes;
+    // We should be able to write a record that's right _at_ the max record size
     taskMemoryManager = spy(taskMemoryManager);
     when(taskMemoryManager.pageSizeBytes()).thenReturn(pageSizeBytes);
-    final UnsafeShuffleWriter<Object, Object> writer = new UnsafeShuffleWriter<>(
-        blockManager,
-        taskMemoryManager,
-        new SerializedShuffleHandle<>(0, shuffleDep),
-        0L, // map id
-        taskContext,
-        conf,
-        taskContext.taskMetrics().shuffleWriteMetrics(),
-        new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver));
-
-    // Peak memory should be monotonically increasing. More specifically, every time
-    // we allocate a new page it should increase by exactly the size of the page.
+    final UnsafeShuffleWriter<Object, Object> writer = new // map id
+    // Inserting a record that's larger than the max record size
+    UnsafeShuffleWriter<>(// map id
+    blockManager, // map id
+    taskMemoryManager, new SerializedShuffleHandle<>(0, shuffleDep), 0L, taskContext, conf, taskContext.taskMetrics().shuffleWriteMetrics(), new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver));
     long previousPeakMemory = writer.getPeakMemoryUsedBytes();
     long newPeakMemory;
     try {
       for (int i = 0; i < numRecordsPerPage * 10; i++) {
-        writer.insertRecordIntoSorter(new Tuple2<>(1, 1));
-        newPeakMemory = writer.getPeakMemoryUsedBytes();
-        if (i % numRecordsPerPage == 0) {
-          // The first page is allocated in constructor, another page will be allocated after
-          // every numRecordsPerPage records (peak memory should change).
-          assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
-        } else {
-          assertEquals(previousPeakMemory, newPeakMemory);
-        }
-        previousPeakMemory = newPeakMemory;
-      }
+      writer.insertRecordIntoSorter(new Tuple2<>(1, 1));
+    newPeakMemory = writer.getPeakMemoryUsedBytes();
+  if (i % numRecordsPerPage == 0) {
 
-      // Spilling should not change peak memory
-      writer.forceSorterToSpill();
-      newPeakMemory = writer.getPeakMemoryUsedBytes();
-      assertEquals(previousPeakMemory, newPeakMemory);
-      for (int i = 0; i < numRecordsPerPage; i++) {
-        writer.insertRecordIntoSorter(new Tuple2<>(1, 1));
-      }
-      newPeakMemory = writer.getPeakMemoryUsedBytes();
-      assertEquals(previousPeakMemory, newPeakMemory);
-
-      // Closing the writer should not change peak memory
-      writer.closeAndWriteOutput();
-      newPeakMemory = writer.getPeakMemoryUsedBytes();
-      assertEquals(previousPeakMemory, newPeakMemory);
-    } finally {
-      writer.stop(false);
+  assertEquals(previousPeakMemory + pageSizeBytes, newPeakMemory);
+  } else {
+    assertEquals(previousPeakMemory, newPeakMemory);
     }
-  }
+    previousPeakMemory = newPeakMemory;
+    }
+    writer.forceSorterToSpill();
+    newPeakMemory = writer.getPeakMemoryUsedBytes();
+    assertEquals(previousPeakMemory, newPeakMemory);
+  for (int i = 0; i < numRecordsPerPage; i++) {
 
-}
+  writer.insertRecordIntoSorter(new Tuple2<>(1, 1));
+  }
+    newPeakMemory = writer.getPeakMemoryUsedBytes();
+    assertEquals(previousPeakMemory, newPeakMemory);
+    writer.closeAndWriteOutput();
+    newPeakMemory = writer.getPeakMemoryUsedBytes();
+    assertEquals(previousPeakMemory, newPeakMemory);
+    } finally {
+        writer.stop(false);
+        }
+        }
+        }

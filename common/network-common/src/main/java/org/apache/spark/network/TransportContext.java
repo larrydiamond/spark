@@ -121,43 +121,43 @@ public class TransportContext implements Closeable {
     this.rpcHandler = rpcHandler;
     this.closeIdleConnections = closeIdleConnections;
 
-    if (conf.getModuleName() != null &&
-        conf.getModuleName().equalsIgnoreCase("shuffle") &&
-        !isClientOnly && conf.separateChunkFetchRequest()) {
-      chunkFetchWorkers = NettyUtils.createEventLoop(
-          IOMode.valueOf(conf.ioMode()),
-          conf.chunkFetchHandlerThreads(),
-          "shuffle-chunk-fetch-handler");
-    } else {
+    if (conf.getModuleName() != null && "shuffle".equalsIgnoreCase(conf.getModuleName()) && !isClientOnly && conf.separateChunkFetchRequest()) {
+        chunkFetchWorkers = NettyUtils.createEventLoop(IOMode.valueOf(conf.ioMode()), conf.chunkFetchHandlerThreads(), "shuffle-chunk-fetch-handler");
+        } else {
       chunkFetchWorkers = null;
-    }
-  }
+          }
+          }
+          /**
+    * Initializes a ClientFactory which runs the given TransportClientBootstraps prior to returning
+      * a new Client. Bootstraps will be executed synchronously, and must run successfully in order
+    * to create a Client.
+  */
 
-  /**
-   * Initializes a ClientFactory which runs the given TransportClientBootstraps prior to returning
-   * a new Client. Bootstraps will be executed synchronously, and must run successfully in order
-   * to create a Client.
-   */
   public TransportClientFactory createClientFactory(List<TransportClientBootstrap> bootstraps) {
-    return new TransportClientFactory(this, bootstraps);
+   return new TransportClientFactory(this, bootstraps);
+   }
+   public TransportClientFactory createClientFactory() {
+   return createClientFactory(new ArrayList<>());
   }
+    /**
+  * Create a server which will attempt to bind to a specific port.
 
-  public TransportClientFactory createClientFactory() {
-    return createClientFactory(new ArrayList<>());
+  */
+    public TransportServer createServer(int port, List<TransportServerBootstrap> bootstraps) {
+  return new TransportServer(this, null, port, rpcHandler, bootstraps);
+
   }
+  /**
+    * Create a server which will attempt to bind to a specific host and port.
+  */
 
-  /** Create a server which will attempt to bind to a specific port. */
-  public TransportServer createServer(int port, List<TransportServerBootstrap> bootstraps) {
-    return new TransportServer(this, null, port, rpcHandler, bootstraps);
-  }
+  public TransportServer createServer(String host, int port, List<TransportServerBootstrap> bootstraps) {
+  return new TransportServer(this, host, port, rpcHandler, bootstraps);
+      }
+    /**
+  * Creates a new server, binding to any available ephemeral port.
 
-  /** Create a server which will attempt to bind to a specific host and port. */
-  public TransportServer createServer(
-      String host, int port, List<TransportServerBootstrap> bootstraps) {
-    return new TransportServer(this, host, port, rpcHandler, bootstraps);
-  }
-
-  /** Creates a new server, binding to any available ephemeral port. */
+  */
   public TransportServer createServer(List<TransportServerBootstrap> bootstraps) {
     return createServer(0, bootstraps);
   }
@@ -187,59 +187,46 @@ public class TransportContext implements Closeable {
       RpcHandler channelRpcHandler) {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
-      ChannelPipeline pipeline = channel.pipeline()
-        .addLast("encoder", ENCODER)
-        .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
-        .addLast("decoder", DECODER)
-        .addLast("idleStateHandler",
-          new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
+      ChannelPipeline pipeline = channel.pipeline().addLast("encoder", ENCODER).addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder()).addLast("decoder", DECODER).addLast("idleStateHandler", new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000)).addLast("handler", channelHandler);
+        if (chunkFetchWorkers != null) {
+        ChunkFetchRequestHandler chunkFetchHandler = new ChunkFetchRequestHandler(channelHandler.getClient(), rpcHandler.getStreamManager(), conf.maxChunksBeingTransferred(), true);
+        pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
+        }
+          return channelHandler;
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
-        .addLast("handler", channelHandler);
+        } catch (RuntimeException e) {
       // Use a separate EventLoopGroup to handle ChunkFetchRequest messages for shuffle rpcs.
-      if (chunkFetchWorkers != null) {
-        ChunkFetchRequestHandler chunkFetchHandler = new ChunkFetchRequestHandler(
-          channelHandler.getClient(), rpcHandler.getStreamManager(),
-          conf.maxChunksBeingTransferred(), true /* syncModeEnabled */);
-        pipeline.addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
-      }
-      return channelHandler;
-    } catch (RuntimeException e) {
       logger.error("Error while initializing Netty pipeline", e);
-      throw e;
-    }
-  }
-
-  /**
-   * Creates the server- and client-side handler which is used to handle both RequestMessages and
-   * ResponseMessages. The channel is expected to have been successfully created, though certain
-   * properties (such as the remoteAddress()) may not be available yet.
-   */
-  private TransportChannelHandler createChannelHandler(Channel channel, RpcHandler rpcHandler) {
+        throw e;
+          }
+          }
+        /**
+      * Creates the server- and client-side handler which is used to handle both RequestMessages and
+      * ResponseMessages. The channel is expected to have been successfully created, though certain
+    * properties (such as the remoteAddress()) may not be available yet.
+      */
+      private TransportChannelHandler createChannelHandler(Channel channel, RpcHandler rpcHandler) {
     TransportResponseHandler responseHandler = new TransportResponseHandler(channel);
-    TransportClient client = new TransportClient(channel, responseHandler);
-    boolean separateChunkFetchRequest = conf.separateChunkFetchRequest();
-    ChunkFetchRequestHandler chunkFetchRequestHandler = null;
-    if (!separateChunkFetchRequest) {
-      chunkFetchRequestHandler = new ChunkFetchRequestHandler(
-        client, rpcHandler.getStreamManager(),
-        conf.maxChunksBeingTransferred(), false /* syncModeEnabled */);
+  TransportClient client = new TransportClient(channel, responseHandler);
+
+  boolean separateChunkFetchRequest = conf.separateChunkFetchRequest();
+   ChunkFetchRequestHandler chunkFetchRequestHandler = null;
+   if (!separateChunkFetchRequest) {
+   chunkFetchRequestHandler = new ChunkFetchRequestHandler(client, rpcHandler.getStreamManager(), conf.maxChunksBeingTransferred(), false);
+   }
+  TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client, rpcHandler, conf.maxChunksBeingTransferred(), chunkFetchRequestHandler);
+    return new TransportChannelHandler(client, responseHandler, requestHandler, conf.connectionTimeoutMs(), separateChunkFetchRequest, closeIdleConnections, this);
     }
-    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, client,
-      rpcHandler, conf.maxChunksBeingTransferred(), chunkFetchRequestHandler);
-    return new TransportChannelHandler(client, responseHandler, requestHandler,
-      conf.connectionTimeoutMs(), separateChunkFetchRequest, closeIdleConnections, this);
-  }
-
-  public TransportConf getConf() { return conf; }
-
-  public Counter getRegisteredConnections() {
-    return registeredConnections;
-  }
-
-  public void close() {
+    public TransportConf getConf() {
+    return conf;
+    }
+      public Counter getRegisteredConnections() {
+        return registeredConnections;
+        }
+    public void close() {
     if (chunkFetchWorkers != null) {
       chunkFetchWorkers.shutdownGracefully();
     }
+      }
   }
-}

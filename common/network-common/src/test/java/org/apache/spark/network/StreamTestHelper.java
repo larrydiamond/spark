@@ -31,6 +31,7 @@ import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.TransportConf;
 
+import java.security.SecureRandom;
 class StreamTestHelper {
   static final String[] STREAMS = { "largeBuffer", "smallBuffer", "emptyBuffer", "file" };
 
@@ -59,7 +60,7 @@ class StreamTestHelper {
     testFile = File.createTempFile("stream-test-file", "txt", tempDir);
     FileOutputStream fp = new FileOutputStream(testFile);
     try {
-      Random rnd = new Random();
+      Random rnd = new SecureRandom();
       for (int i = 0; i < 512; i++) {
         byte[] fileContent = new byte[1024];
         rnd.nextBytes(fileContent);

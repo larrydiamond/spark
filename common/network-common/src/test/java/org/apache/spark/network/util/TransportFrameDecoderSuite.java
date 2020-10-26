@@ -33,10 +33,11 @@ import org.slf4j.LoggerFactory;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
+import java.security.SecureRandom;
 public class TransportFrameDecoderSuite {
 
   private static final Logger logger = LoggerFactory.getLogger(TransportFrameDecoderSuite.class);
-  private static Random RND = new Random();
+  private static Random RND = new SecureRandom();
 
   @AfterClass
   public static void cleanup() {
@@ -53,258 +54,232 @@ public class TransportFrameDecoderSuite {
 
   @Test
   public void testConsolidationPerf() throws Exception {
-    long[] testingConsolidateThresholds = new long[] {
-        ByteUnit.MiB.toBytes(1),
-        ByteUnit.MiB.toBytes(5),
-        ByteUnit.MiB.toBytes(10),
-        ByteUnit.MiB.toBytes(20),
-        ByteUnit.MiB.toBytes(30),
-        ByteUnit.MiB.toBytes(50),
-        ByteUnit.MiB.toBytes(80),
-        ByteUnit.MiB.toBytes(100),
-        ByteUnit.MiB.toBytes(300),
-        ByteUnit.MiB.toBytes(500),
-        Long.MAX_VALUE };
-    for (long threshold : testingConsolidateThresholds) {
-      TransportFrameDecoder decoder = new TransportFrameDecoder(threshold);
-      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
-      List<ByteBuf> retained = new ArrayList<>();
-      when(ctx.fireChannelRead(any())).thenAnswer(in -> {
+    long[] testingConsolidateThresholds = new long[] { ByteUnit.MiB.toBytes(1), ByteUnit.MiB.toBytes(5), ByteUnit.MiB.toBytes(10), ByteUnit.MiB.toBytes(20), ByteUnit.MiB.toBytes(30), ByteUnit.MiB.toBytes(50), ByteUnit.MiB.toBytes(80), ByteUnit.MiB.toBytes(100), ByteUnit.MiB.toBytes(300), ByteUnit.MiB.toBytes(500), Long.MAX_VALUE };
+        for (long threshold : testingConsolidateThresholds) {
+        TransportFrameDecoder decoder = new TransportFrameDecoder(threshold);
+        ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+        List<ByteBuf> retained = new ArrayList<>();
+        when(ctx.fireChannelRead(any())).thenAnswer(in -> {
         ByteBuf buf = (ByteBuf) in.getArguments()[0];
         retained.add(buf);
         return null;
-      });
+        });
+        int numMessages = 3;
+        long targetBytes = ByteUnit.MiB.toBytes(300);
+    int pieceBytes = (int) ByteUnit.KiB.toBytes(32);
+      for (int i = 0; i < numMessages; i++) {
+      try {
+      long writtenBytes = 0;
+      long totalTime = 0;
+        ByteBuf buf = Unpooled.buffer(8);
+        buf.writeLong(8 + targetBytes);
+        decoder.channelRead(ctx, buf);
+      while (writtenBytes < targetBytes) {
 
       // Testing multiple messages
-      int numMessages = 3;
-      long targetBytes = ByteUnit.MiB.toBytes(300);
-      int pieceBytes = (int) ByteUnit.KiB.toBytes(32);
-      for (int i = 0; i < numMessages; i++) {
-        try {
-          long writtenBytes = 0;
-          long totalTime = 0;
-          ByteBuf buf = Unpooled.buffer(8);
-          buf.writeLong(8 + targetBytes);
+      buf = Unpooled.buffer(pieceBytes * 2);
+      ByteBuf writtenBuf = Unpooled.buffer(pieceBytes).writerIndex(pieceBytes);
+      buf.writeBytes(writtenBuf);
+      writtenBuf.release();
+        long start = System.currentTimeMillis();
           decoder.channelRead(ctx, buf);
-          while (writtenBytes < targetBytes) {
-            buf = Unpooled.buffer(pieceBytes * 2);
-            ByteBuf writtenBuf = Unpooled.buffer(pieceBytes).writerIndex(pieceBytes);
-            buf.writeBytes(writtenBuf);
-            writtenBuf.release();
-            long start = System.currentTimeMillis();
-            decoder.channelRead(ctx, buf);
-            long elapsedTime = System.currentTimeMillis() - start;
-            totalTime += elapsedTime;
-            writtenBytes += pieceBytes;
+          long elapsedTime = System.currentTimeMillis() - start;
+          totalTime += elapsedTime;
+          writtenBytes += pieceBytes;
           }
-          logger.info("Writing 300MiB frame buf with consolidation of threshold " + threshold
-              + " took " + totalTime + " milis");
-        } finally {
-          for (ByteBuf buf : retained) {
+          logger.info("Writing 300MiB frame buf with consolidation of threshold " + threshold + " took " + totalTime + " milis");
+            } finally {
+            for (ByteBuf buf : retained) {
             release(buf);
+            }
+            }
+            }
+            long totalBytesGot = 0;
+            for (ByteBuf buf : retained) {
+            totalBytesGot += buf.capacity();
           }
+          assertEquals(numMessages, retained.size());
+              assertEquals(targetBytes * numMessages, totalBytesGot);
         }
-      }
-      long totalBytesGot = 0;
-      for (ByteBuf buf : retained) {
-        totalBytesGot += buf.capacity();
-      }
-      assertEquals(numMessages, retained.size());
-      assertEquals(targetBytes * numMessages, totalBytesGot);
+          }
+            @Test
+          public void testInterception() throws Exception {
+        int interceptedReads = 3;
+      TransportFrameDecoder decoder = new TransportFrameDecoder();
+      TransportFrameDecoder.Interceptor interceptor = spy(new MockInterceptor(interceptedReads));
+      ChannelHandlerContext ctx = mockChannelHandlerContext();
+        byte[] data = new byte[8];
+      ByteBuf len = Unpooled.copyLong(8 + data.length);
+      ByteBuf dataBuf = Unpooled.wrappedBuffer(data);
+      try {
+    decoder.setInterceptor(interceptor);
+  for (int i = 0; i < interceptedReads; i++) {
+
+  decoder.channelRead(ctx, dataBuf);
+  assertEquals(0, dataBuf.refCnt());
+    dataBuf = Unpooled.wrappedBuffer(data);
     }
-  }
+    decoder.channelRead(ctx, len);
+    decoder.channelRead(ctx, dataBuf);
 
-  @Test
-  public void testInterception() throws Exception {
-    int interceptedReads = 3;
-    TransportFrameDecoder decoder = new TransportFrameDecoder();
-    TransportFrameDecoder.Interceptor interceptor = spy(new MockInterceptor(interceptedReads));
-    ChannelHandlerContext ctx = mockChannelHandlerContext();
+    verify(interceptor, times(interceptedReads)).handle(any(ByteBuf.class));
+    verify(ctx).fireChannelRead(any(ByteBuf.class));
+    assertEquals(0, len.refCnt());
 
-    byte[] data = new byte[8];
-    ByteBuf len = Unpooled.copyLong(8 + data.length);
-    ByteBuf dataBuf = Unpooled.wrappedBuffer(data);
-
-    try {
-      decoder.setInterceptor(interceptor);
-      for (int i = 0; i < interceptedReads; i++) {
-        decoder.channelRead(ctx, dataBuf);
-        assertEquals(0, dataBuf.refCnt());
-        dataBuf = Unpooled.wrappedBuffer(data);
-      }
-      decoder.channelRead(ctx, len);
-      decoder.channelRead(ctx, dataBuf);
-      verify(interceptor, times(interceptedReads)).handle(any(ByteBuf.class));
-      verify(ctx).fireChannelRead(any(ByteBuf.class));
-      assertEquals(0, len.refCnt());
-      assertEquals(0, dataBuf.refCnt());
-    } finally {
+    assertEquals(0, dataBuf.refCnt());
+      } finally {
       release(len);
-      release(dataBuf);
-    }
-  }
-
-  @Test
-  public void testRetainedFrames() throws Exception {
-    TransportFrameDecoder decoder = new TransportFrameDecoder();
-
-    AtomicInteger count = new AtomicInteger();
-    List<ByteBuf> retained = new ArrayList<>();
-
-    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
-    when(ctx.fireChannelRead(any())).thenAnswer(in -> {
-      // Retain a few frames but not others.
-      ByteBuf buf = (ByteBuf) in.getArguments()[0];
+        release(dataBuf);
+        }
+        }
+      @Test
+      public void testRetainedFrames() throws Exception {
+      TransportFrameDecoder decoder = new TransportFrameDecoder();
+      AtomicInteger count = new AtomicInteger();
+      List<ByteBuf> retained = new ArrayList<>();
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      when(ctx.fireChannelRead(any())).thenAnswer(in -> {
+    ByteBuf buf = (ByteBuf) in.getArguments()[0];
       if (count.incrementAndGet() % 2 == 0) {
-        retained.add(buf);
-      } else {
-        buf.release();
-      }
-      return null;
+      retained.add(buf);
+    } else {
+  buf.release();
+
+  }
+  return null;
     });
 
     ByteBuf data = createAndFeedFrames(100, decoder, ctx);
     try {
-      // Verify all retained buffers are readable.
-      for (ByteBuf b : retained) {
-        byte[] tmp = new byte[b.readableBytes()];
-        b.readBytes(tmp);
-        b.release();
-      }
+
+    for (ByteBuf b : retained) {
+    byte[] tmp = new byte[b.readableBytes()];
+      // Retain a few frames but not others.
+      b.readBytes(tmp);
+      b.release();
+        }
       verifyAndCloseDecoder(decoder, ctx, data);
-    } finally {
+        } finally {
       for (ByteBuf b : retained) {
-        release(b);
-      }
+      release(b);
     }
-  }
 
-  @Test
-  public void testSplitLengthField() throws Exception {
-    byte[] frame = new byte[1024 * (RND.nextInt(31) + 1)];
-    ByteBuf buf = Unpooled.buffer(frame.length + 8);
-    buf.writeLong(frame.length + 8);
-    buf.writeBytes(frame);
-
+    }
+    }
+      // Verify all retained buffers are readable.
+      @Test
+        public void testSplitLengthField() throws Exception {
+        byte[] frame = new byte[1024 * (RND.nextInt(31) + 1)];
+        ByteBuf buf = Unpooled.buffer(frame.length + 8);
+      buf.writeLong(frame.length + 8);
+      buf.writeBytes(frame);
     TransportFrameDecoder decoder = new TransportFrameDecoder();
-    ChannelHandlerContext ctx = mockChannelHandlerContext();
-    try {
+      ChannelHandlerContext ctx = mockChannelHandlerContext();
+        try {
       decoder.channelRead(ctx, buf.readSlice(RND.nextInt(7)).retain());
-      verify(ctx, never()).fireChannelRead(any(ByteBuf.class));
-      decoder.channelRead(ctx, buf);
-      verify(ctx).fireChannelRead(any(ByteBuf.class));
-      assertEquals(0, buf.refCnt());
+    verify(ctx, never()).fireChannelRead(any(ByteBuf.class));
+  decoder.channelRead(ctx, buf);
+
+  verify(ctx).fireChannelRead(any(ByteBuf.class));
+  assertEquals(0, buf.refCnt());
     } finally {
-      decoder.channelInactive(ctx);
-      release(buf);
-    }
-  }
-
-  @Test(expected = IllegalArgumentException.class)
-  public void testNegativeFrameSize() throws Exception {
-    testInvalidFrame(-1);
-  }
-
-  @Test(expected = IllegalArgumentException.class)
-  public void testEmptyFrame() throws Exception {
-    // 8 because frame size includes the frame length.
-    testInvalidFrame(8);
-  }
-
-  /**
-   * Creates a number of randomly sized frames and feed them to the given decoder, verifying
-   * that the frames were read.
-   */
-  private ByteBuf createAndFeedFrames(
-      int frameCount,
-      TransportFrameDecoder decoder,
-      ChannelHandlerContext ctx) throws Exception {
-    ByteBuf data = Unpooled.buffer();
-    for (int i = 0; i < frameCount; i++) {
-      byte[] frame = new byte[1024 * (RND.nextInt(31) + 1)];
-      data.writeLong(frame.length + 8);
-      data.writeBytes(frame);
+    decoder.channelInactive(ctx);
+    release(buf);
     }
 
-    try {
-      while (data.isReadable()) {
-        int size = RND.nextInt(4 * 1024) + 256;
-        decoder.channelRead(ctx, data.readSlice(Math.min(data.readableBytes(), size)).retain());
+    }
+    @Test(expected = IllegalArgumentException.class)
+    public void testNegativeFrameSize() throws Exception {
+      testInvalidFrame(-1);
       }
+      @Test(expected = IllegalArgumentException.class)
+      public void testEmptyFrame() throws Exception {
+      testInvalidFrame(8);
+    }
+      /**
+      * Creates a number of randomly sized frames and feed them to the given decoder, verifying
+    * that the frames were read.
+  */
 
-      verify(ctx, times(frameCount)).fireChannelRead(any(ByteBuf.class));
-    } catch (Exception e) {
+  private ByteBuf createAndFeedFrames(int frameCount, TransportFrameDecoder decoder, ChannelHandlerContext ctx) throws Exception {
+  ByteBuf data = Unpooled.buffer();
+    for (int i = 0; i < frameCount; i++) {
+  byte[] frame = new byte[1024 * (RND.nextInt(31) + 1)];
+
+  data.writeLong(frame.length + 8);
+  data.writeBytes(frame);
+    // 8 because frame size includes the frame length.
+    }
+  try {
+
+  while (data.isReadable()) {
+   int size = RND.nextInt(4 * 1024) + 256;
+   decoder.channelRead(ctx, data.readSlice(Math.min(data.readableBytes(), size)).retain());
+   }
+  verify(ctx, times(frameCount)).fireChannelRead(any(ByteBuf.class));
+      } catch (Exception e) {
       release(data);
       throw e;
     }
     return data;
-  }
+      }
+      private void verifyAndCloseDecoder(TransportFrameDecoder decoder, ChannelHandlerContext ctx, ByteBuf data) throws Exception {
+      try {
+    decoder.channelInactive(ctx);
 
-  private void verifyAndCloseDecoder(
-      TransportFrameDecoder decoder,
-      ChannelHandlerContext ctx,
-      ByteBuf data) throws Exception {
-    try {
-      decoder.channelInactive(ctx);
-      assertTrue("There shouldn't be dangling references to the data.", data.release());
-    } finally {
-      release(data);
-    }
-  }
+    assertTrue("There shouldn't be dangling references to the data.", data.release());
+      } finally {
+        release(data);
+        }
+      }
 
-  private void testInvalidFrame(long size) throws Exception {
+      private void testInvalidFrame(long size) throws Exception {
     TransportFrameDecoder decoder = new TransportFrameDecoder();
-    ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
-    ByteBuf frame = Unpooled.copyLong(size);
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ByteBuf frame = Unpooled.copyLong(size);
     try {
-      decoder.channelRead(ctx, frame);
-    } finally {
-      release(frame);
-    }
-  }
+    decoder.channelRead(ctx, frame);
+  } finally {
 
-  private ChannelHandlerContext mockChannelHandlerContext() {
+  release(frame);
+      }
+      }
+      private ChannelHandlerContext mockChannelHandlerContext() {
     ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
-    when(ctx.fireChannelRead(any())).thenAnswer(in -> {
+      when(ctx.fireChannelRead(any())).thenAnswer(in -> {
       ByteBuf buf = (ByteBuf) in.getArguments()[0];
-      buf.release();
+    buf.release();
       return null;
     });
-    return ctx;
-  }
+  return ctx;
 
-  private void release(ByteBuf buf) {
+  }
+    private void release(ByteBuf buf) {
     if (buf.refCnt() > 0) {
-      buf.release(buf.refCnt());
+    buf.release(buf.refCnt());
     }
-  }
-
-  private static class MockInterceptor implements TransportFrameDecoder.Interceptor {
-
-    private int remainingReads;
-
+      }
+    private static class MockInterceptor implements TransportFrameDecoder.Interceptor {
+      private int remainingReads;
     MockInterceptor(int readCount) {
-      this.remainingReads = readCount;
-    }
+  this.remainingReads = readCount;
 
+  }
     @Override
     public boolean handle(ByteBuf data) throws Exception {
       data.readerIndex(data.readerIndex() + data.readableBytes());
       assertFalse(data.isReadable());
       remainingReads -= 1;
-      return remainingReads != 0;
+    return remainingReads != 0;
     }
+  @Override
 
-    @Override
-    public void exceptionCaught(Throwable cause) throws Exception {
-
+  public void exceptionCaught(Throwable cause) throws Exception {
     }
-
-    @Override
+      @Override
     public void channelInactive() throws Exception {
-
-    }
+  }
 
   }
 
-}
+    }

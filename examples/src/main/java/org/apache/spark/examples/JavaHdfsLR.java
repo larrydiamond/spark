@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.Random;
 import java.util.regex.Pattern;
 
+import java.security.SecureRandom;
 /**
  * Logistic regression based classification.
  *
@@ -36,7 +37,7 @@ import java.util.regex.Pattern;
 public final class JavaHdfsLR {
 
   private static final int D = 10;   // Number of dimensions
-  private static final Random rand = new Random(42);
+  private static final Random rand = new SecureRandom();
 
   static void showWarning() {
     String warning = "WARN: This is a naive implementation of Logistic Regression " +

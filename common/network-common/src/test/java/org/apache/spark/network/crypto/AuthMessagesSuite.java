@@ -57,18 +57,18 @@ public class AuthMessagesSuite {
     assertEquals(msg.iterations, decoded.iterations);
     assertEquals(msg.cipher, decoded.cipher);
     assertEquals(msg.keyLength, decoded.keyLength);
-    assertTrue(Arrays.equals(msg.nonce, decoded.nonce));
-    assertTrue(Arrays.equals(msg.challenge, decoded.challenge));
+    assertEquals(Arrays, msg.nonce);
+    assertEquals(Arrays, msg.challenge);
   }
 
   @Test
   public void testServerResponse() {
     ServerResponse msg = new ServerResponse(byteArray(), byteArray(), byteArray(), byteArray());
     ServerResponse decoded = ServerResponse.decodeMessage(encode(msg));
-    assertTrue(Arrays.equals(msg.response, decoded.response));
-    assertTrue(Arrays.equals(msg.nonce, decoded.nonce));
-    assertTrue(Arrays.equals(msg.inputIv, decoded.inputIv));
-    assertTrue(Arrays.equals(msg.outputIv, decoded.outputIv));
+    assertEquals(Arrays, msg.response);
+    assertEquals(Arrays, msg.nonce);
+    assertEquals(Arrays, msg.inputIv);
+    assertEquals(Arrays, msg.outputIv);
   }
 
   private ByteBuffer encode(Encodable msg) {

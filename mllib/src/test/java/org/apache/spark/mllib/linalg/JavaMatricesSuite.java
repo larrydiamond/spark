@@ -24,11 +24,12 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
+import java.security.SecureRandom;
 public class JavaMatricesSuite {
 
   @Test
   public void randMatrixConstruction() {
-    Random rng = new Random(24);
+    Random rng = new SecureRandom();
     Matrix r = Matrices.rand(3, 4, rng);
     rng.setSeed(24);
     DenseMatrix dr = DenseMatrix.rand(3, 4, rng);
@@ -124,7 +125,7 @@ public class JavaMatricesSuite {
     int m = 3;
     int n = 2;
 
-    Random rng = new Random(42);
+    Random rng = new SecureRandom();
     SparseMatrix spMat1 = SparseMatrix.sprand(m, n, 0.5, rng);
     rng.setSeed(42);
     DenseMatrix deMat1 = DenseMatrix.rand(m, n, rng);

@@ -38,6 +38,7 @@ import static org.junit.Assert.assertTrue;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
+import java.security.SecureRandom;
 public class CleanupNonShuffleServiceServedFilesSuite {
 
   // Same-thread Executor used to ensure cleanup happens synchronously in test thread.
@@ -239,7 +240,7 @@ public class CleanupNonShuffleServiceServedFilesSuite {
   }
 
   private static void createFilesToKeep(TestShuffleDataContext dataContext) throws IOException {
-    Random rand = new Random(123);
+    Random rand = new SecureRandom();
     dataContext.insertSortShuffleData(rand.nextInt(1000), rand.nextInt(1000), new byte[][] {
         "ABC".getBytes(StandardCharsets.UTF_8),
         "DEF".getBytes(StandardCharsets.UTF_8)});
